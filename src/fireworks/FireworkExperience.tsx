@@ -8,8 +8,13 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
+  DEFAULT_CAMERA_SETTINGS,
   FireworkScene,
+  type CameraFilter,
+  type CameraSettings,
+  type EnvironmentPreset,
   type FireworkPattern,
+  type FireworkShowCue,
   type PaletteName,
   type PatternPoint,
 } from "./FireworkScene";
@@ -21,6 +26,12 @@ const PATTERNS: Array<{ id: FireworkPattern; name: string; note: string; mark: s
   { id: "saturn", name: "环游星球", note: "双环焰火", mark: "◎" },
   { id: "willow", name: "金色垂柳", note: "坠入湖面", mark: "⌇" },
   { id: "star", name: "摘一颗星", note: "星形留影", mark: "★" },
+  { id: "spiral", name: "三旋星涡", note: "旋臂展开", mark: "◌" },
+  { id: "butterfly", name: "流光蝶翼", note: "双翼定格", mark: "⋈" },
+  { id: "palm", name: "鎏金棕榈", note: "长枝垂落", mark: "Ψ" },
+  { id: "crown", name: "星光王冠", note: "冠冕成形", mark: "♕" },
+  { id: "double-ring", name: "双轨星环", note: "交错双环", mark: "⊚" },
+  { id: "meteor", name: "九曜流星", note: "长轨疾驰", mark: "彡" },
 ];
 
 const PALETTES: Array<{ id: PaletteName; name: string; colors: string[] }> = [
@@ -30,7 +41,63 @@ const PALETTES: Array<{ id: PaletteName; name: string; colors: string[] }> = [
   { id: "dream", name: "银河幻梦", colors: ["#705cff", "#26d6ff", "#ff4ddd"] },
 ];
 
-type StudioMode = "text" | "pattern" | "draw";
+type StudioMode = "text" | "pattern" | "draw" | "show";
+
+type ShowCue = FireworkShowCue & { id: number };
+
+const ENVIRONMENTS: Array<{
+  id: EnvironmentPreset;
+  name: string;
+  note: string;
+  mark: string;
+}> = [
+  { id: "moon-castle", name: "月影王城", note: "城堡屋顶", mark: "♜" },
+  { id: "rose-garden", name: "蔷薇穹庭", note: "花瓣与玻璃宫", mark: "✿" },
+  { id: "cloud-observatory", name: "云端星台", note: "悬浮观星仪", mark: "◌" },
+];
+
+const DEFAULT_SHOW: ShowCue[] = [
+  { id: 1, pattern: "peony", palette: "aurora", delay: 0.4 },
+  { id: 2, pattern: "spiral", palette: "dream", delay: 0.8 },
+  { id: 3, pattern: "heart", palette: "love", delay: 0.9 },
+  { id: 4, pattern: "willow", palette: "gold", delay: 1.1 },
+  { id: 5, pattern: "butterfly", palette: "love", delay: 0.8 },
+];
+
+const SHOW_DELAYS = [0.4, 0.7, 1, 1.4, 2];
+
+const SHUTTER_OPTIONS = [1 / 15, 1 / 30, 1 / 60, 1 / 125, 1 / 250, 1 / 500];
+const ISO_OPTIONS = [100, 200, 320, 400, 800, 1600];
+
+const CAMERA_PRESETS: Array<{ name: string; note: string; settings: CameraSettings }> = [
+  {
+    name: "夜景清透",
+    note: "颜色分明",
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 4, iso: 320, bloom: 0.3, filter: "neutral" },
+  },
+  {
+    name: "电影柔光",
+    note: "柔和景深",
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 35, aperture: 2, iso: 400, bloom: 0.46, filter: "cinema" },
+  },
+  {
+    name: "玫瑰胶片",
+    note: "暖粉肤色",
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 50, aperture: 1.8, iso: 320, bloom: 0.38, filter: "rose" },
+  },
+  {
+    name: "冷月长焦",
+    note: "压缩远景",
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 70, aperture: 4.5, iso: 800, bloom: 0.24, filter: "moonlight" },
+  },
+];
+
+const FILTERS: Array<{ id: CameraFilter; name: string }> = [
+  { id: "neutral", name: "自然" },
+  { id: "cinema", name: "电影" },
+  { id: "rose", name: "玫瑰" },
+  { id: "moonlight", name: "冷月" },
+];
 
 function sampleText(text: string): PatternPoint[] {
   const canvas = document.createElement("canvas");
@@ -93,19 +160,20 @@ function drawStarterHeart(canvas: HTMLCanvasElement) {
   context.strokeStyle = "rgba(255,255,255,.96)";
   context.shadowColor = "#ff63b5";
   context.shadowBlur = 18;
-  context.lineWidth = 16;
+  context.lineWidth = Math.max(16, canvas.width * 0.018);
   context.lineCap = "round";
   context.lineJoin = "round";
   context.beginPath();
+  const heartScale = Math.min(canvas.width * 0.23, canvas.height * 0.38);
   const points = Array.from({ length: 160 }, (_, index) => {
     const t = (index / 159) * Math.PI * 2;
     return {
-      x: canvas.width / 2 + Math.pow(Math.sin(t), 3) * 104,
+      x: canvas.width / 2 + Math.pow(Math.sin(t), 3) * heartScale,
       y:
         canvas.height / 2 -
         ((13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) /
           16) *
-          94,
+          heartScale,
     };
   });
   points.forEach((point, index) => {
@@ -122,6 +190,10 @@ export function FireworkExperience() {
   const viewportRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<FireworkScene | null>(null);
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const uploadedMusicUrlRef = useRef<string | null>(null);
+  const drawingInitializedRef = useRef(false);
+  const nextCueIdRef = useRef(6);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDrawingRef = useRef(false);
   const lastDrawPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -133,6 +205,15 @@ export function FireworkExperience() {
   const [palette, setPalette] = useState<PaletteName>("love");
   const [sound, setSound] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
+  const [photoMode, setPhotoMode] = useState(false);
+  const [photoPaused, setPhotoPaused] = useState(false);
+  const [cameraSettings, setCameraSettings] = useState<CameraSettings>({ ...DEFAULT_CAMERA_SETTINGS });
+  const [environment, setEnvironment] = useState<EnvironmentPreset>("moon-castle");
+  const [activePopover, setActivePopover] = useState<"scene" | "music" | null>(null);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(0.34);
+  const [musicName, setMusicName] = useState("降 E 大调夜曲");
+  const [showCues, setShowCues] = useState<ShowCue[]>(DEFAULT_SHOW);
   const [status, setStatus] = useState("烟火正在为你们升空");
 
   useEffect(() => {
@@ -143,18 +224,84 @@ export function FireworkExperience() {
     return () => {
       scene.dispose();
       sceneRef.current = null;
+      if (uploadedMusicUrlRef.current) URL.revokeObjectURL(uploadedMusicUrlRef.current);
     };
   }, []);
 
   useEffect(() => {
     const canvas = drawingCanvasRef.current;
-    if (canvas) drawStarterHeart(canvas);
-  }, []);
+    if (mode === "draw" && canvas && !drawingInitializedRef.current) {
+      drawStarterHeart(canvas);
+      drawingInitializedRef.current = true;
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    sceneRef.current?.setCameraSettings(cameraSettings);
+  }, [cameraSettings]);
+
+  useEffect(() => {
+    sceneRef.current?.setEnvironment(environment);
+  }, [environment]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = musicVolume;
+  }, [musicVolume]);
 
   const announce = useCallback((nextStatus: string) => {
     setStatus(nextStatus);
     window.setTimeout(() => setStatus("点击夜空，也能亲手放一束烟花"), 2400);
   }, []);
+
+  const setPhotoModeActive = useCallback(
+    (active: boolean) => {
+      setPhotoMode(active);
+      setPhotoPaused(active);
+      sceneRef.current?.setPaused(active);
+      announce(active ? "摄像模式已开启，时间停在这一帧" : "已经回到实时烟花夜");
+    },
+    [announce],
+  );
+
+  const togglePhotoMode = useCallback(() => {
+    setPhotoModeActive(!photoMode);
+  }, [photoMode, setPhotoModeActive]);
+
+  const togglePhotoPause = useCallback(() => {
+    const next = !photoPaused;
+    setPhotoPaused(next);
+    sceneRef.current?.setPaused(next);
+    announce(next ? "画面已暂停，可以慢慢调参数" : "烟花重新开始流动");
+  }, [announce, photoPaused]);
+
+  const resetCamera = useCallback(() => {
+    sceneRef.current?.resetView();
+    announce("视角已回到双人座位");
+  }, [announce]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setPhotoModeActive(!photoMode);
+        return;
+      }
+      if (!photoMode) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, select, textarea")) return;
+      if (event.code === "Space") {
+        event.preventDefault();
+        togglePhotoPause();
+      } else if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        resetCamera();
+      } else if (event.key === "Escape") {
+        setPhotoModeActive(false);
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [photoMode, resetCamera, setPhotoModeActive, togglePhotoPause]);
 
   const launchText = useCallback(
     (finale = false) => {
@@ -219,6 +366,121 @@ export function FireworkExperience() {
     announce(next ? "烟花会继续自动绽放" : "夜空交给你亲手点亮");
   };
 
+  const chooseEnvironment = (next: EnvironmentPreset, name: string) => {
+    setEnvironment(next);
+    sceneRef.current?.setEnvironment(next);
+    setActivePopover(null);
+    announce(`已经来到${name}`);
+  };
+
+  const toggleMusic = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!audio.paused) {
+      audio.pause();
+      setMusicPlaying(false);
+      return;
+    }
+    try {
+      await audio.play();
+      setMusicPlaying(true);
+    } catch {
+      setMusicPlaying(false);
+    }
+  };
+
+  const useBuiltInMusic = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (uploadedMusicUrlRef.current) {
+      URL.revokeObjectURL(uploadedMusicUrlRef.current);
+      uploadedMusicUrlRef.current = null;
+    }
+    audio.src = "/nocturne-op9-no2.mp3";
+    audio.load();
+    setMusicName("降 E 大调夜曲");
+    try {
+      await audio.play();
+      setMusicPlaying(true);
+    } catch {
+      setMusicPlaying(false);
+    }
+  };
+
+  const useLocalMusic = async (file?: File) => {
+    const audio = audioRef.current;
+    if (!audio || !file) return;
+    if (uploadedMusicUrlRef.current) URL.revokeObjectURL(uploadedMusicUrlRef.current);
+    const url = URL.createObjectURL(file);
+    uploadedMusicUrlRef.current = url;
+    audio.src = url;
+    audio.load();
+    setMusicName(file.name.replace(/\.[^.]+$/, ""));
+    try {
+      await audio.play();
+      setMusicPlaying(true);
+    } catch {
+      setMusicPlaying(false);
+    }
+  };
+
+  const addShowCue = () => {
+    if (showCues.length >= 12) return;
+    setShowCues((current) => [
+      ...current,
+      {
+        id: nextCueIdRef.current++,
+        pattern: pattern as FireworkShowCue["pattern"],
+        palette,
+        delay: 0.8,
+      },
+    ]);
+  };
+
+  const updateShowCue = (id: number, patch: Partial<FireworkShowCue>) => {
+    setShowCues((current) => current.map((cue) => (cue.id === id ? { ...cue, ...patch } : cue)));
+  };
+
+  const removeShowCue = (id: number) => {
+    setShowCues((current) => current.filter((cue) => cue.id !== id));
+  };
+
+  const moveShowCue = (index: number, direction: -1 | 1) => {
+    setShowCues((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
+  const playShow = () => {
+    if (!showCues.length) return;
+    setAutoPlay(false);
+    sceneRef.current?.launchSequence(showCues);
+    announce(`属于你们的 ${showCues.length} 幕烟花秀开始了`);
+  };
+
+  const updateCameraSettings = (patch: Partial<CameraSettings>) => {
+    setCameraSettings((current) => ({ ...current, ...patch }));
+  };
+
+  const applyCameraPreset = (settings: CameraSettings, name: string) => {
+    setCameraSettings({ ...settings });
+    announce(`已切换到「${name}」镜头预设`);
+  };
+
+  const capturePhoto = () => {
+    const image = sceneRef.current?.captureFrame();
+    if (!image) return;
+    const link = document.createElement("a");
+    link.href = image;
+    link.download = `our-firework-night-${Date.now()}.png`;
+    link.click();
+    announce("这一帧已经保存下来");
+  };
+
   const handleSkyPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     dragStartRef.current = { x: event.clientX, y: event.clientY };
   };
@@ -259,7 +521,7 @@ export function FireworkExperience() {
     context.strokeStyle = "rgba(255,255,255,.98)";
     context.shadowColor = "#ff58b0";
     context.shadowBlur = 15;
-    context.lineWidth = 15;
+    context.lineWidth = 22;
     context.lineCap = "round";
     context.lineJoin = "round";
     context.beginPath();
@@ -289,7 +551,7 @@ export function FireworkExperience() {
   return (
     <main
       ref={rootRef}
-      className={`firework-shell ${ready ? "is-ready" : ""}`}
+      className={`firework-shell ${ready ? "is-ready" : ""} ${photoMode ? "is-photo-mode" : ""}`}
       data-testid="firework-night"
     >
       <div
@@ -297,6 +559,14 @@ export function FireworkExperience() {
         className="firework-viewport"
         onPointerDown={handleSkyPointerDown}
         onPointerUp={handleSkyPointerUp}
+      />
+      <audio
+        ref={audioRef}
+        src="/nocturne-op9-no2.mp3"
+        preload="metadata"
+        loop
+        onPlay={() => setMusicPlaying(true)}
+        onPause={() => setMusicPlaying(false)}
       />
       <div className="color-wash" aria-hidden="true" />
       <div className="cinema-grain" aria-hidden="true" />
@@ -315,13 +585,33 @@ export function FireworkExperience() {
         </div>
 
         <div className="utility-actions" aria-label="观景设置">
+          <button
+            type="button"
+            className={activePopover === "scene" ? "is-active" : ""}
+            onClick={() => setActivePopover((current) => (current === "scene" ? null : "scene"))}
+          >
+            <span aria-hidden="true">♜</span>
+            场景
+          </button>
+          <button
+            type="button"
+            className={musicPlaying || activePopover === "music" ? "is-active" : ""}
+            onClick={() => setActivePopover((current) => (current === "music" ? null : "music"))}
+          >
+            <span aria-hidden="true">{musicPlaying ? "♫" : "♪"}</span>
+            音乐
+          </button>
           <button type="button" className={sound ? "is-active" : ""} onClick={toggleSound}>
             <span aria-hidden="true">{sound ? "♪" : "♩"}</span>
-            {sound ? "有声" : "静音"}
+            音效
           </button>
           <button type="button" className={autoPlay ? "is-active" : ""} onClick={toggleAutoPlay}>
             <span aria-hidden="true">∞</span>
-            {autoPlay ? "自动" : "手动"}
+            连放
+          </button>
+          <button type="button" className={photoMode ? "is-active" : ""} onClick={togglePhotoMode}>
+            <span aria-hidden="true">◉</span>
+            摄像
           </button>
           <button type="button" onClick={toggleFullscreen}>
             <span aria-hidden="true">⌗</span>
@@ -330,25 +620,216 @@ export function FireworkExperience() {
         </div>
       </header>
 
-      <div className="seat-status" aria-label="双人观景状态">
-        <span className="seat-avatars" aria-hidden="true"><i /> <i /></span>
-        <span><strong>两个人，已入座</strong><small>LAKESIDE SEAT · 02</small></span>
+      <section className={`experience-popover scene-popover ${activePopover === "scene" ? "is-open" : ""}`} aria-label="场景选择">
+        <header>
+          <div><small>此刻所在</small><strong>{ENVIRONMENTS.find((item) => item.id === environment)?.name}</strong></div>
+          <button type="button" onClick={() => setActivePopover(null)} aria-label="关闭">×</button>
+        </header>
+        <div className="scene-options">
+          {ENVIRONMENTS.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={environment === item.id ? "is-selected" : ""}
+              onClick={() => chooseEnvironment(item.id, item.name)}
+            >
+              <i aria-hidden="true">{item.mark}</i>
+              <span><strong>{item.name}</strong><small>{item.note}</small></span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className={`experience-popover music-popover ${activePopover === "music" ? "is-open" : ""}`} aria-label="背景音乐">
+        <header>
+          <div><small>正在播放</small><strong>{musicName}</strong></div>
+          <button type="button" onClick={() => setActivePopover(null)} aria-label="关闭">×</button>
+        </header>
+        <div className="music-player">
+          <button type="button" className="music-play" onClick={toggleMusic} aria-label={musicPlaying ? "暂停音乐" : "播放音乐"}>
+            {musicPlaying ? "Ⅱ" : "▶"}
+          </button>
+          <div className={musicPlaying ? "music-wave is-playing" : "music-wave"} aria-hidden="true">
+            {Array.from({ length: 18 }, (_, index) => <i key={index} />)}
+          </div>
+        </div>
+        <label className="music-volume">
+          <span>音量</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={musicVolume}
+            onChange={(event) => setMusicVolume(Number(event.target.value))}
+          />
+          <output>{Math.round(musicVolume * 100)}</output>
+        </label>
+        <div className="music-sources">
+          <button type="button" onClick={() => void useBuiltInMusic()}>肖邦夜曲</button>
+          <label>
+            选择本地音乐
+            <input type="file" accept="audio/*" onChange={(event) => void useLocalMusic(event.target.files?.[0])} />
+          </label>
+        </div>
+      </section>
+
+      <div className="photo-mode-indicator" aria-hidden={!photoMode}>
+        <span className={photoPaused ? "is-paused" : ""} />
+        <strong>摄像模式</strong>
+        <small>{photoPaused ? "画面暂停" : "实时"}</small>
       </div>
 
-      <div className="sky-hint">
-        <span aria-hidden="true">＋</span>
-        点击夜空放一束烟花 · 拖动可以环顾四周
-      </div>
+      <section className={`camera-console ${photoMode ? "is-open" : ""}`} aria-label="专业摄像参数">
+        <header className="camera-console-header">
+          <div>
+            <p>PRO CAMERA / 眼睛视角</p>
+            <h2>专业摄像台</h2>
+          </div>
+          <button type="button" onClick={() => setPhotoModeActive(false)} aria-label="退出摄像模式">×</button>
+        </header>
 
-      <section className={`firework-studio ${studioOpen ? "is-open" : ""}`} aria-label="烟花创作台">
+        <div className="camera-readout" aria-label="当前曝光参数">
+          <span><small>LENS</small><strong>{cameraSettings.focalLength.toFixed(0)}<i>mm</i></strong></span>
+          <span><small>IRIS</small><strong>ƒ/{cameraSettings.aperture.toFixed(1)}</strong></span>
+          <span><small>SHUTTER</small><strong>1/{Math.round(1 / cameraSettings.shutterSeconds)}</strong></span>
+          <span><small>SENSOR</small><strong>ISO {cameraSettings.iso}</strong></span>
+        </div>
+
+        <div className="camera-presets" aria-label="摄像预设">
+          {CAMERA_PRESETS.map((preset) => (
+            <button
+              type="button"
+              key={preset.name}
+              onClick={() => applyCameraPreset(preset.settings, preset.name)}
+            >
+              <strong>{preset.name}</strong><small>{preset.note}</small>
+            </button>
+          ))}
+        </div>
+
+        <div className="camera-controls">
+          <label>
+            <span><strong>焦段</strong><small>FOCAL LENGTH</small></span>
+            <output>{cameraSettings.focalLength.toFixed(0)} mm</output>
+            <input
+              type="range"
+              min="18"
+              max="85"
+              step="1"
+              value={cameraSettings.focalLength}
+              onChange={(event) => updateCameraSettings({ focalLength: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            <span><strong>光圈</strong><small>APERTURE</small></span>
+            <output>ƒ/{cameraSettings.aperture.toFixed(1)}</output>
+            <input
+              type="range"
+              min="1.4"
+              max="16"
+              step="0.1"
+              value={cameraSettings.aperture}
+              onChange={(event) => updateCameraSettings({ aperture: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            <span><strong>快门</strong><small>SHUTTER SPEED</small></span>
+            <output>1/{Math.round(1 / cameraSettings.shutterSeconds)} s</output>
+            <input
+              type="range"
+              min="0"
+              max={SHUTTER_OPTIONS.length - 1}
+              step="1"
+              value={SHUTTER_OPTIONS.findIndex((value) => value === cameraSettings.shutterSeconds)}
+              onChange={(event) => updateCameraSettings({ shutterSeconds: SHUTTER_OPTIONS[Number(event.target.value)] })}
+            />
+          </label>
+          <label>
+            <span><strong>感光度</strong><small>SENSOR ISO</small></span>
+            <output>ISO {cameraSettings.iso}</output>
+            <input
+              type="range"
+              min="0"
+              max={ISO_OPTIONS.length - 1}
+              step="1"
+              value={ISO_OPTIONS.findIndex((value) => value === cameraSettings.iso)}
+              onChange={(event) => updateCameraSettings({ iso: ISO_OPTIONS[Number(event.target.value)] })}
+            />
+          </label>
+          <label>
+            <span><strong>对焦距离</strong><small>FOCUS</small></span>
+            <output>{cameraSettings.focusDistance.toFixed(0)} m</output>
+            <input
+              type="range"
+              min="6"
+              max="70"
+              step="1"
+              value={cameraSettings.focusDistance}
+              onChange={(event) => updateCameraSettings({ focusDistance: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            <span><strong>镜头辉光</strong><small>HALATION</small></span>
+            <output>{Math.round(cameraSettings.bloom * 100)}%</output>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={cameraSettings.bloom}
+              onChange={(event) => updateCameraSettings({ bloom: Number(event.target.value) })}
+            />
+          </label>
+        </div>
+
+        <div className="filter-strip">
+          <span>FILTER / 滤镜</span>
+          <div>
+            {FILTERS.map((filter) => (
+              <button
+                type="button"
+                key={filter.id}
+                className={cameraSettings.filter === filter.id ? "is-selected" : ""}
+                onClick={() => updateCameraSettings({ filter: filter.id })}
+              >
+                {filter.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="camera-actions">
+          <button type="button" onClick={togglePhotoPause}>
+            <span aria-hidden="true">{photoPaused ? "▶" : "Ⅱ"}</span>
+            {photoPaused ? "继续播放" : "暂停画面"}
+          </button>
+          <button type="button" onClick={resetCamera}>
+            <span aria-hidden="true">⌖</span> 重置视角
+          </button>
+          <button type="button" className="capture-button" onClick={capturePhoto}>
+            <span aria-hidden="true">●</span> 保存照片
+          </button>
+        </div>
+
+        <p className="camera-shortcuts">
+          <span><kbd>⌘ P</kbd> 进入 / 退出</span>
+          <span><kbd>SPACE</kbd> 暂停 / 播放</span>
+          <span><kbd>R</kbd> 视角归位</span>
+        </p>
+      </section>
+
+      <section
+        className={`firework-studio ${studioOpen ? "is-open" : ""} ${mode === "draw" || mode === "show" ? "is-expanded" : ""}`}
+        aria-label="烟花创作台"
+      >
         <button
           type="button"
           className="studio-handle"
           onClick={() => setStudioOpen((current) => !current)}
           aria-expanded={studioOpen}
         >
-          <span><i aria-hidden="true">✦</i> 烟花创作台</span>
-          <strong>{studioOpen ? "收起" : "为她写一束烟花"}</strong>
+          <span><i aria-hidden="true">✦</i> 烟花工坊</span>
           <b aria-hidden="true">{studioOpen ? "⌄" : "⌃"}</b>
         </button>
 
@@ -361,7 +842,7 @@ export function FireworkExperience() {
               className={mode === "text" ? "is-selected" : ""}
               onClick={() => setMode("text")}
             >
-              <span>01</span> 写一句话
+              文字
             </button>
             <button
               type="button"
@@ -370,7 +851,7 @@ export function FireworkExperience() {
               className={mode === "pattern" ? "is-selected" : ""}
               onClick={() => setMode("pattern")}
             >
-              <span>02</span> 选一束光
+              单束
             </button>
             <button
               type="button"
@@ -379,7 +860,16 @@ export function FireworkExperience() {
               className={mode === "draw" ? "is-selected" : ""}
               onClick={() => setMode("draw")}
             >
-              <span>03</span> 画个图案
+              画板
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "show"}
+              className={mode === "show" ? "is-selected" : ""}
+              onClick={() => setMode("show")}
+            >
+              烟花组
             </button>
           </div>
 
@@ -426,14 +916,14 @@ export function FireworkExperience() {
           {mode === "draw" && (
             <div className="drawing-panel" role="tabpanel">
               <div className="drawing-copy">
-                <span>在这里画下任何形状</span>
-                <small>线条会变成悬停在夜空里的粒子</small>
+                <span>自由画板</span>
+                <button type="button" onClick={clearDrawing}>清空</button>
               </div>
               <div className="drawing-board">
                 <canvas
                   ref={drawingCanvasRef}
-                  width={520}
-                  height={220}
+                  width={960}
+                  height={560}
                   aria-label="手绘烟花图案画布"
                   onPointerDown={startDrawing}
                   onPointerMove={continueDrawing}
@@ -441,30 +931,105 @@ export function FireworkExperience() {
                   onPointerCancel={stopDrawing}
                   onPointerLeave={stopDrawing}
                 />
-                <button type="button" onClick={clearDrawing}>清空重画</button>
               </div>
             </div>
           )}
 
-          <div className="studio-footer">
-            <div className="palette-picker" aria-label="烟花配色">
-              {PALETTES.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  className={palette === item.id ? "is-selected" : ""}
-                  aria-label={item.name}
-                  title={item.name}
-                  onClick={() => setPalette(item.id)}
-                >
-                  {item.colors.map((color) => <i key={color} style={{ background: color }} />)}
-                </button>
-              ))}
+          {mode === "show" && (
+            <div className="show-composer" role="tabpanel">
+              <div className="show-add-row">
+                <label>
+                  <span>烟花</span>
+                  <select value={pattern} onChange={(event) => setPattern(event.target.value as FireworkPattern)}>
+                    {PATTERNS.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                  </select>
+                </label>
+                <div className="show-palette" aria-label="新烟花配色">
+                  {PALETTES.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className={palette === item.id ? "is-selected" : ""}
+                      onClick={() => setPalette(item.id)}
+                      aria-label={item.name}
+                      style={{ background: `linear-gradient(135deg, ${item.colors.join(",")})` }}
+                    />
+                  ))}
+                </div>
+                <button type="button" className="add-cue-button" onClick={addShowCue} disabled={showCues.length >= 12}>＋ 加入</button>
+              </div>
+
+              <ol className="show-cue-list">
+                {showCues.map((cue, index) => {
+                  const selectedPattern = PATTERNS.find((item) => item.id === cue.pattern);
+                  const selectedPalette = PALETTES.find((item) => item.id === cue.palette);
+                  return (
+                    <li key={cue.id}>
+                      <b>{String(index + 1).padStart(2, "0")}</b>
+                      <i aria-hidden="true">{selectedPattern?.mark}</i>
+                      <select
+                        aria-label={`第 ${index + 1} 束烟花`}
+                        value={cue.pattern}
+                        onChange={(event) => updateShowCue(cue.id, { pattern: event.target.value as FireworkShowCue["pattern"] })}
+                      >
+                        {PATTERNS.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                      </select>
+                      <select
+                        aria-label={`第 ${index + 1} 束配色`}
+                        className="cue-palette-select"
+                        value={cue.palette}
+                        onChange={(event) => updateShowCue(cue.id, { palette: event.target.value as PaletteName })}
+                        style={{ borderColor: selectedPalette?.colors[0] }}
+                      >
+                        {PALETTES.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                      </select>
+                      <select
+                        aria-label={`第 ${index + 1} 束间隔`}
+                        value={cue.delay}
+                        onChange={(event) => updateShowCue(cue.id, { delay: Number(event.target.value) })}
+                      >
+                        {SHOW_DELAYS.map((delay) => <option value={delay} key={delay}>{delay.toFixed(1)}s</option>)}
+                      </select>
+                      <span className="cue-order-actions">
+                        <button type="button" onClick={() => moveShowCue(index, -1)} disabled={index === 0} aria-label="上移">↑</button>
+                        <button type="button" onClick={() => moveShowCue(index, 1)} disabled={index === showCues.length - 1} aria-label="下移">↓</button>
+                        <button type="button" onClick={() => removeShowCue(cue.id)} aria-label="移除">×</button>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
             </div>
-            <button type="button" className="launch-button" onClick={launchCurrent}>
-              <span>点亮夜空</span><i aria-hidden="true">↗</i>
-            </button>
-          </div>
+          )}
+
+          {mode !== "show" ? (
+            <div className="studio-footer">
+              <div className="palette-picker" aria-label="烟花配色">
+                {PALETTES.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={palette === item.id ? "is-selected" : ""}
+                    aria-label={item.name}
+                    title={item.name}
+                    onClick={() => setPalette(item.id)}
+                  >
+                    {item.colors.map((color) => <i key={color} style={{ background: color }} />)}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="launch-button" onClick={launchCurrent}>
+                <span>点亮夜空</span><i aria-hidden="true">↗</i>
+              </button>
+            </div>
+          ) : (
+            <div className="show-footer">
+              <button type="button" className="clear-show-button" onClick={() => setShowCues([])}>清空</button>
+              <button type="button" className="launch-button" onClick={playShow} disabled={!showCues.length}>
+                <span>播放烟花组</span><i aria-hidden="true">▶</i>
+              </button>
+            </div>
+          )}
 
           {mode === "text" && (
             <button type="button" className="finale-button" onClick={() => launchText(true)}>
@@ -476,12 +1041,7 @@ export function FireworkExperience() {
         </div>
       </section>
 
-      <p className="live-status" aria-live="polite">{status}</p>
-
-      <footer className="scene-footer">
-        <p><span>REALTIME THREE.JS</span><span>PROCEDURAL FIREWORKS</span><span>TWO SEATS</span></p>
-        <p>为两个刚好遇见的人 · MADE UNDER THE STARS</p>
-      </footer>
+      <p className="sr-only" aria-live="polite">{status}</p>
     </main>
   );
 }
