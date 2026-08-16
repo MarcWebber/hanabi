@@ -27,7 +27,6 @@ import {
   type LaunchOptions,
   type PaletteName,
   type PatternPoint,
-  type WorldPreset,
 } from "./types";
 import { MagicCityWorld } from "./world/MagicCityWorld";
 
@@ -120,7 +119,7 @@ export class FireworkScene {
   private readonly bursts: Burst[] = [];
   private readonly timers = new Set<number>();
   private readonly clock = new THREE.Timer();
-  private readonly eyeAnchor = new THREE.Vector3(-0.74, 2.56, 3.5);
+  private readonly eyeAnchor = new THREE.Vector3(-0.72, 1.82, 3.55);
   private frameHandle = 0;
   private disposed = false;
   private autoPlay = true;
@@ -145,7 +144,7 @@ export class FireworkScene {
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.78;
+    this.renderer.toneMappingExposure = 0.86;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setClearColor(0x030510, 1);
@@ -183,10 +182,18 @@ export class FireworkScene {
     this.resizeObserver.observe(this.container);
     this.resize();
     this.animate();
-    this.schedule(260, () => {
-      onReady?.();
-      this.openingSequence();
-    });
+    void this.world.ready
+      .then(() => {
+        if (this.disposed) return;
+        this.schedule(140, () => {
+          onReady?.();
+          this.openingSequence();
+        });
+      })
+      .catch((error: unknown) => {
+        console.error("Unable to load the authored Moonharbor scene", error);
+        onReady?.();
+      });
   }
 
   setAutoPlay(enabled: boolean) {
@@ -196,10 +203,6 @@ export class FireworkScene {
 
   setEnvironment(preset: EnvironmentPreset) {
     this.world.setPreset(preset);
-  }
-
-  setWorld(preset: WorldPreset) {
-    this.world.setWorld(preset);
   }
 
   setPaused(paused: boolean) {
@@ -218,7 +221,7 @@ export class FireworkScene {
     const isoStops = Math.log2(settings.iso / 320);
     const apertureStops = Math.log2(Math.pow(2.8 / settings.aperture, 2));
     const exposureStops = (shutterStops + isoStops + apertureStops) * 0.18;
-    this.renderer.toneMappingExposure = THREE.MathUtils.clamp(0.78 * Math.pow(2, exposureStops), 0.42, 1.05);
+    this.renderer.toneMappingExposure = THREE.MathUtils.clamp(0.86 * Math.pow(2, exposureStops), 0.48, 1.14);
     this.bloomPass.threshold = THREE.MathUtils.lerp(0.68, 0.4, settings.bloom);
     this.bloomPass.strength = THREE.MathUtils.lerp(0.12, 0.62, settings.bloom);
     this.bloomPass.radius = THREE.MathUtils.lerp(0.15, 0.38, settings.bloom);
@@ -398,6 +401,7 @@ export class FireworkScene {
   }
 
   private explode(rocket: Rocket) {
+    this.world.pulseFirework(rocket.target, rocket.color, rocket.tuning.power);
     const clouds = makeBurstClouds(rocket.target, rocket.options, this.pixelRatio);
     const particleIntensity = 0.53 + this.cameraSettings.bloom * 0.18;
     clouds.forEach((cloud) => {

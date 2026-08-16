@@ -18,13 +18,6 @@ export type PaletteName = "love" | "aurora" | "gold" | "dream";
 
 export type EnvironmentPreset = "moon-castle" | "rose-garden" | "cloud-observatory";
 
-export type WorldPreset =
-  | "magic-city"
-  | "cloud-citadel"
-  | "snow-belltower"
-  | "enchanted-ruins"
-  | "moonlit-harbor";
-
 export type FireworkLaunchStyle = "classic" | "comet" | "spiral" | "twin";
 
 export type FireworkDissipation = "soft" | "glitter" | "embers" | "strobe";
@@ -69,11 +62,11 @@ export type CameraSettings = {
 
 export const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
   focalLength: 28,
-  aperture: 2.8,
+  aperture: 4,
   shutterSeconds: 1 / 60,
   iso: 320,
-  focusDistance: 30,
-  bloom: 0.36,
+  focusDistance: 24,
+  bloom: 0.24,
   filter: "cinema",
 };
 

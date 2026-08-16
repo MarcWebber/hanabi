@@ -24,7 +24,6 @@ import {
   type FireworkTuning,
   type PaletteName,
   type PatternPoint,
-  type WorldPreset,
 } from "./types";
 
 const PATTERNS: Array<{ id: FireworkPattern; name: string; note: string; mark: string }> = [
@@ -81,19 +80,6 @@ const TUNING_CONTROLS: Array<{
 ];
 
 type ShowCue = FireworkShowCue & { id: number };
-
-const WORLDS: Array<{
-  id: WorldPreset;
-  name: string;
-  note: string;
-  mark: string;
-}> = [
-  { id: "magic-city", name: "星月王城", note: "红瓦、风车与魔法教堂", mark: "♜" },
-  { id: "cloud-citadel", name: "云海浮城", note: "浮岛、空桥与巡游飞艇", mark: "☁" },
-  { id: "snow-belltower", name: "雪夜钟楼", note: "积雪古镇与暖窗钟声", mark: "❄" },
-  { id: "enchanted-ruins", name: "精灵森林", note: "古树、月门与荧光遗迹", mark: "♧" },
-  { id: "moonlit-harbor", name: "月湾灯塔港", note: "灯塔、帆船与海港灯火", mark: "♢" },
-];
 
 const ENVIRONMENTS: Array<{
   id: EnvironmentPreset;
@@ -265,9 +251,8 @@ export function FireworkExperience() {
   const [photoMode, setPhotoMode] = useState(false);
   const [photoPaused, setPhotoPaused] = useState(false);
   const [cameraSettings, setCameraSettings] = useState<CameraSettings>({ ...DEFAULT_CAMERA_SETTINGS });
-  const [world, setWorld] = useState<WorldPreset>("magic-city");
   const [environment, setEnvironment] = useState<EnvironmentPreset>("moon-castle");
-  const [activePopover, setActivePopover] = useState<"scene" | "music" | null>(null);
+  const [activePopover, setActivePopover] = useState<"atmosphere" | "music" | null>(null);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicVolume, setMusicVolume] = useState(0.34);
   const [musicName, setMusicName] = useState("降 E 大调夜曲");
@@ -297,10 +282,6 @@ export function FireworkExperience() {
   useEffect(() => {
     sceneRef.current?.setCameraSettings(cameraSettings);
   }, [cameraSettings]);
-
-  useEffect(() => {
-    sceneRef.current?.setWorld(world);
-  }, [world]);
 
   useEffect(() => {
     sceneRef.current?.setEnvironment(environment);
@@ -442,12 +423,6 @@ export function FireworkExperience() {
     setEnvironment(next);
     sceneRef.current?.setEnvironment(next);
     announce(`夜色已经换成${name}`);
-  };
-
-  const chooseWorld = (next: WorldPreset, name: string) => {
-    setWorld(next);
-    sceneRef.current?.setWorld(next);
-    announce(`已经来到${name}`);
   };
 
   const toggleMusic = async () => {
@@ -667,11 +642,11 @@ export function FireworkExperience() {
         <div className="utility-actions" aria-label="观景设置">
           <button
             type="button"
-            className={activePopover === "scene" ? "is-active" : ""}
-            onClick={() => setActivePopover((current) => (current === "scene" ? null : "scene"))}
+            className={activePopover === "atmosphere" ? "is-active" : ""}
+            onClick={() => setActivePopover((current) => (current === "atmosphere" ? null : "atmosphere"))}
           >
-            <span aria-hidden="true">♜</span>
-            场景
+            <span aria-hidden="true">☾</span>
+            夜色
           </button>
           <button
             type="button"
@@ -700,26 +675,12 @@ export function FireworkExperience() {
         </div>
       </header>
 
-      <section className={`experience-popover scene-popover ${activePopover === "scene" ? "is-open" : ""}`} aria-label="场景选择">
+      <section className={`experience-popover scene-popover ${activePopover === "atmosphere" ? "is-open" : ""}`} aria-label="夜色氛围">
         <header>
-          <div><small>此刻所在</small><strong>{WORLDS.find((item) => item.id === world)?.name}</strong></div>
+          <div><small>月港王城 · 此刻夜色</small><strong>{ENVIRONMENTS.find((item) => item.id === environment)?.name}</strong></div>
           <button type="button" onClick={() => setActivePopover(null)} aria-label="关闭">×</button>
         </header>
-        <div className="scene-section-title"><span>观景地点</span><small>5 个实时地图</small></div>
-        <div className="world-options">
-          {WORLDS.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              className={world === item.id ? "is-selected" : ""}
-              onClick={() => chooseWorld(item.id, item.name)}
-            >
-              <i aria-hidden="true">{item.mark}</i>
-              <span><strong>{item.name}</strong><small>{item.note}</small></span>
-            </button>
-          ))}
-        </div>
-        <div className="scene-section-title"><span>节庆氛围</span><small>可叠加到任意地图</small></div>
+        <div className="scene-section-title"><span>光影氛围</span><small>同步改变天空、湖面与城堡光色</small></div>
         <div className="atmosphere-options">
           {ENVIRONMENTS.map((item) => (
             <button
