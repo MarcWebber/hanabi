@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description: "坐近一点，今晚的星光会记得我们。",
       type: "website",
       locale: "zh_CN",
-      images: [{ url: previewImage, width: 1672, height: 941, alt: "湖畔双人烟花夜" }],
+      images: [{ url: previewImage, width: 1672, height: 941, alt: "魔法王城双人烟花夜" }],
     },
     twitter: {
       card: "summary_large_image",

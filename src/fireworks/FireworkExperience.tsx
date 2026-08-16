@@ -5,19 +5,27 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  DEFAULT_CAMERA_SETTINGS,
   FireworkScene,
+} from "./FireworkScene";
+import {
+  DEFAULT_CAMERA_SETTINGS,
+  DEFAULT_FIREWORK_TUNING,
   type CameraFilter,
   type CameraSettings,
   type EnvironmentPreset,
+  type FireworkDissipation,
+  type FireworkLaunchStyle,
   type FireworkPattern,
   type FireworkShowCue,
+  type FireworkTuning,
   type PaletteName,
   type PatternPoint,
-} from "./FireworkScene";
+  type WorldPreset,
+} from "./types";
 
 const PATTERNS: Array<{ id: FireworkPattern; name: string; note: string; mark: string }> = [
   { id: "peony", name: "星河牡丹", note: "层层绽放", mark: "✺" },
@@ -41,9 +49,51 @@ const PALETTES: Array<{ id: PaletteName; name: string; colors: string[] }> = [
   { id: "dream", name: "银河幻梦", colors: ["#705cff", "#26d6ff", "#ff4ddd"] },
 ];
 
-type StudioMode = "text" | "pattern" | "draw" | "show";
+type StudioMode = "text" | "pattern" | "draw" | "effect" | "show";
+
+type NumericTuningKey = "power" | "spread" | "lifetime" | "trail";
+
+const LAUNCH_STYLES: Array<{ id: FireworkLaunchStyle; name: string; note: string; mark: string }> = [
+  { id: "classic", name: "经典升空", note: "干净直线", mark: "↑" },
+  { id: "comet", name: "彗星长尾", note: "长轨慢升", mark: "↗" },
+  { id: "spiral", name: "螺旋升空", note: "盘旋入夜", mark: "↻" },
+  { id: "twin", name: "双星齐发", note: "双束呼应", mark: "⇈" },
+];
+
+const DISSIPATIONS: Array<{ id: FireworkDissipation; name: string; note: string }> = [
+  { id: "soft", name: "柔雾", note: "均匀淡出" },
+  { id: "glitter", name: "碎钻", note: "高频闪烁" },
+  { id: "embers", name: "余烬", note: "缓慢坠落" },
+  { id: "strobe", name: "频闪", note: "节奏明灭" },
+];
+
+const TUNING_CONTROLS: Array<{
+  id: NumericTuningKey;
+  name: string;
+  note: string;
+  min: number;
+  max: number;
+}> = [
+  { id: "power", name: "爆炸强度", note: "速度与冲击感", min: 0.55, max: 1.7 },
+  { id: "spread", name: "散开程度", note: "图案覆盖范围", min: 0.5, max: 1.75 },
+  { id: "lifetime", name: "停留时间", note: "留在夜空多久", min: 0.5, max: 1.8 },
+  { id: "trail", name: "拖尾长度", note: "粒子轨迹密度", min: 0.35, max: 1.9 },
+];
 
 type ShowCue = FireworkShowCue & { id: number };
+
+const WORLDS: Array<{
+  id: WorldPreset;
+  name: string;
+  note: string;
+  mark: string;
+}> = [
+  { id: "magic-city", name: "星月王城", note: "红瓦、风车与魔法教堂", mark: "♜" },
+  { id: "cloud-citadel", name: "云海浮城", note: "浮岛、空桥与巡游飞艇", mark: "☁" },
+  { id: "snow-belltower", name: "雪夜钟楼", note: "积雪古镇与暖窗钟声", mark: "❄" },
+  { id: "enchanted-ruins", name: "精灵森林", note: "古树、月门与荧光遗迹", mark: "♧" },
+  { id: "moonlit-harbor", name: "月湾灯塔港", note: "灯塔、帆船与海港灯火", mark: "♢" },
+];
 
 const ENVIRONMENTS: Array<{
   id: EnvironmentPreset;
@@ -51,9 +101,9 @@ const ENVIRONMENTS: Array<{
   note: string;
   mark: string;
 }> = [
-  { id: "moon-castle", name: "月影王城", note: "城堡屋顶", mark: "♜" },
-  { id: "rose-garden", name: "蔷薇穹庭", note: "花瓣与玻璃宫", mark: "✿" },
-  { id: "cloud-observatory", name: "云端星台", note: "悬浮观星仪", mark: "◌" },
+  { id: "moon-castle", name: "星月浮灯", note: "蓝调月夜", mark: "☾" },
+  { id: "rose-garden", name: "蔷薇庆典", note: "暖粉花瓣", mark: "✿" },
+  { id: "cloud-observatory", name: "秘法星潮", note: "青蓝星环", mark: "◌" },
 ];
 
 const DEFAULT_SHOW: ShowCue[] = [
@@ -203,11 +253,19 @@ export function FireworkExperience() {
   const [message, setMessage] = useState("今晚也很喜欢你");
   const [pattern, setPattern] = useState<FireworkPattern>("heart");
   const [palette, setPalette] = useState<PaletteName>("love");
+  const [tuning, setTuning] = useState<FireworkTuning>({ ...DEFAULT_FIREWORK_TUNING });
+  const [customColorsEnabled, setCustomColorsEnabled] = useState(false);
+  const [customColors, setCustomColors] = useState<[string, string, string]>([
+    "#ff4d9d",
+    "#8b6cff",
+    "#ffe6a8",
+  ]);
   const [sound, setSound] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
   const [photoMode, setPhotoMode] = useState(false);
   const [photoPaused, setPhotoPaused] = useState(false);
   const [cameraSettings, setCameraSettings] = useState<CameraSettings>({ ...DEFAULT_CAMERA_SETTINGS });
+  const [world, setWorld] = useState<WorldPreset>("magic-city");
   const [environment, setEnvironment] = useState<EnvironmentPreset>("moon-castle");
   const [activePopover, setActivePopover] = useState<"scene" | "music" | null>(null);
   const [musicPlaying, setMusicPlaying] = useState(false);
@@ -241,6 +299,10 @@ export function FireworkExperience() {
   }, [cameraSettings]);
 
   useEffect(() => {
+    sceneRef.current?.setWorld(world);
+  }, [world]);
+
+  useEffect(() => {
     sceneRef.current?.setEnvironment(environment);
   }, [environment]);
 
@@ -252,6 +314,14 @@ export function FireworkExperience() {
     setStatus(nextStatus);
     window.setTimeout(() => setStatus("点击夜空，也能亲手放一束烟花"), 2400);
   }, []);
+
+  const effectOptions = useCallback(
+    () => ({
+      tuning: { ...tuning },
+      colors: customColorsEnabled ? [...customColors] : undefined,
+    }),
+    [customColors, customColorsEnabled, tuning],
+  );
 
   const setPhotoModeActive = useCallback(
     (active: boolean) => {
@@ -308,7 +378,7 @@ export function FireworkExperience() {
       const cleanMessage = message.trim().slice(0, 14) || "我喜欢你";
       const points = sampleText(cleanMessage);
       if (finale) {
-        sceneRef.current?.launchFinale(points, palette);
+        sceneRef.current?.launchFinale(points, palette, effectOptions());
         announce(`整片夜空，正在写下「${cleanMessage}」`);
       } else {
         sceneRef.current?.launch({
@@ -318,18 +388,19 @@ export function FireworkExperience() {
           x: 0,
           y: 14.5,
           z: -22,
+          ...effectOptions(),
         });
         announce(`「${cleanMessage}」已经飞向夜空`);
       }
     },
-    [announce, message, palette],
+    [announce, effectOptions, message, palette],
   );
 
   const launchSelectedPattern = useCallback(() => {
-    sceneRef.current?.launch({ pattern, palette });
+    sceneRef.current?.launch({ pattern, palette, ...effectOptions() });
     const selected = PATTERNS.find((item) => item.id === pattern);
     announce(`${selected?.name ?? "烟花"}，为你们绽放`);
-  }, [announce, palette, pattern]);
+  }, [announce, effectOptions, palette, pattern]);
 
   const launchDrawing = useCallback(() => {
     const canvas = drawingCanvasRef.current;
@@ -342,9 +413,10 @@ export function FireworkExperience() {
       x: 0,
       y: 14.5,
       z: -22,
+      ...effectOptions(),
     });
     announce("你画下的形状，正在变成烟花");
-  }, [announce, palette]);
+  }, [announce, effectOptions, palette]);
 
   const launchCurrent = () => {
     if (mode === "text") launchText(false);
@@ -369,7 +441,12 @@ export function FireworkExperience() {
   const chooseEnvironment = (next: EnvironmentPreset, name: string) => {
     setEnvironment(next);
     sceneRef.current?.setEnvironment(next);
-    setActivePopover(null);
+    announce(`夜色已经换成${name}`);
+  };
+
+  const chooseWorld = (next: WorldPreset, name: string) => {
+    setWorld(next);
+    sceneRef.current?.setWorld(next);
     announce(`已经来到${name}`);
   };
 
@@ -433,6 +510,8 @@ export function FireworkExperience() {
         pattern: pattern as FireworkShowCue["pattern"],
         palette,
         delay: 0.8,
+        tuning: { ...tuning },
+        colors: customColorsEnabled ? [...customColors] : undefined,
       },
     ]);
   };
@@ -494,6 +573,7 @@ export function FireworkExperience() {
     sceneRef.current?.launchAt(event.clientX, event.clientY, {
       pattern: clickPattern,
       palette,
+      ...effectOptions(),
     });
     announce("这一束，落在你点中的位置");
   };
@@ -622,10 +702,25 @@ export function FireworkExperience() {
 
       <section className={`experience-popover scene-popover ${activePopover === "scene" ? "is-open" : ""}`} aria-label="场景选择">
         <header>
-          <div><small>此刻所在</small><strong>{ENVIRONMENTS.find((item) => item.id === environment)?.name}</strong></div>
+          <div><small>此刻所在</small><strong>{WORLDS.find((item) => item.id === world)?.name}</strong></div>
           <button type="button" onClick={() => setActivePopover(null)} aria-label="关闭">×</button>
         </header>
-        <div className="scene-options">
+        <div className="scene-section-title"><span>观景地点</span><small>5 个实时地图</small></div>
+        <div className="world-options">
+          {WORLDS.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={world === item.id ? "is-selected" : ""}
+              onClick={() => chooseWorld(item.id, item.name)}
+            >
+              <i aria-hidden="true">{item.mark}</i>
+              <span><strong>{item.name}</strong><small>{item.note}</small></span>
+            </button>
+          ))}
+        </div>
+        <div className="scene-section-title"><span>节庆氛围</span><small>可叠加到任意地图</small></div>
+        <div className="atmosphere-options">
           {ENVIRONMENTS.map((item) => (
             <button
               type="button"
@@ -820,7 +915,7 @@ export function FireworkExperience() {
       </section>
 
       <section
-        className={`firework-studio ${studioOpen ? "is-open" : ""} ${mode === "draw" || mode === "show" ? "is-expanded" : ""}`}
+        className={`firework-studio ${studioOpen ? "is-open" : ""} ${mode === "draw" || mode === "effect" || mode === "show" ? "is-expanded" : ""}`}
         aria-label="烟花创作台"
       >
         <button
@@ -861,6 +956,15 @@ export function FireworkExperience() {
               onClick={() => setMode("draw")}
             >
               画板
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "effect"}
+              className={mode === "effect" ? "is-selected" : ""}
+              onClick={() => setMode("effect")}
+            >
+              效果
             </button>
             <button
               type="button"
@@ -935,11 +1039,115 @@ export function FireworkExperience() {
             </div>
           )}
 
+          {mode === "effect" && (
+            <div className="effect-panel" role="tabpanel">
+              <header className="effect-panel-header">
+                <div>
+                  <strong>烟花动力学</strong>
+                  <span>这些参数会应用到手动烟花，也会随新加入的烟花组保存</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTuning({ ...DEFAULT_FIREWORK_TUNING });
+                    setCustomColorsEnabled(false);
+                  }}
+                >
+                  复位
+                </button>
+              </header>
+
+              <div className="effect-choice-columns">
+                <section>
+                  <h3>升空轨迹</h3>
+                  <div className="launch-style-grid">
+                    {LAUNCH_STYLES.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        className={tuning.launchStyle === item.id ? "is-selected" : ""}
+                        onClick={() => setTuning((current) => ({ ...current, launchStyle: item.id }))}
+                      >
+                        <i aria-hidden="true">{item.mark}</i>
+                        <span><b>{item.name}</b><small>{item.note}</small></span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section>
+                  <h3>消散方式</h3>
+                  <div className="dissipation-grid">
+                    {DISSIPATIONS.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        className={tuning.dissipation === item.id ? "is-selected" : ""}
+                        onClick={() => setTuning((current) => ({ ...current, dissipation: item.id }))}
+                      >
+                        <span>{item.name}</span>
+                        <small>{item.note}</small>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              </div>
+
+              <div className="effect-sliders">
+                {TUNING_CONTROLS.map((control) => (
+                  <label key={control.id}>
+                    <span><b>{control.name}</b><small>{control.note}</small></span>
+                    <output>{Math.round(tuning[control.id] * 100)}%</output>
+                    <input
+                      type="range"
+                      min={control.min}
+                      max={control.max}
+                      step={0.05}
+                      value={tuning[control.id]}
+                      onChange={(event) => setTuning((current) => ({
+                        ...current,
+                        [control.id]: Number(event.target.value),
+                      }))}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <div className={`custom-color-panel ${customColorsEnabled ? "is-active" : ""}`}>
+                <button
+                  type="button"
+                  className="custom-color-toggle"
+                  aria-pressed={customColorsEnabled}
+                  onClick={() => setCustomColorsEnabled((current) => !current)}
+                >
+                  <span><b>自定义三色焰心</b><small>关闭时沿用主题配色</small></span>
+                  <i aria-hidden="true" />
+                </button>
+                <div className="custom-color-inputs" aria-hidden={!customColorsEnabled}>
+                  {customColors.map((color, index) => (
+                    <label key={`${index}-${color}`} style={{ "--custom-color": color } as CSSProperties}>
+                      <input
+                        type="color"
+                        value={color}
+                        disabled={!customColorsEnabled}
+                        aria-label={`自定义烟花颜色 ${index + 1}`}
+                        onChange={(event) => setCustomColors((current) => current.map((item, colorIndex) => (
+                          colorIndex === index ? event.target.value : item
+                        )) as [string, string, string])}
+                      />
+                      <span>{color.toUpperCase()}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {mode === "show" && (
             <div className="show-composer" role="tabpanel">
               <div className="show-add-row">
                 <label>
-                  <span>烟花</span>
+                  <span>烟花 · 当前效果会随这一幕保存</span>
                   <select value={pattern} onChange={(event) => setPattern(event.target.value as FireworkPattern)}>
                     {PATTERNS.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
                   </select>
@@ -950,7 +1158,10 @@ export function FireworkExperience() {
                       type="button"
                       key={item.id}
                       className={palette === item.id ? "is-selected" : ""}
-                      onClick={() => setPalette(item.id)}
+                      onClick={() => {
+                        setPalette(item.id);
+                        setCustomColorsEnabled(false);
+                      }}
                       aria-label={item.name}
                       style={{ background: `linear-gradient(135deg, ${item.colors.join(",")})` }}
                     />
@@ -991,6 +1202,17 @@ export function FireworkExperience() {
                         {SHOW_DELAYS.map((delay) => <option value={delay} key={delay}>{delay.toFixed(1)}s</option>)}
                       </select>
                       <span className="cue-order-actions">
+                        <button
+                          type="button"
+                          onClick={() => updateShowCue(cue.id, {
+                            tuning: { ...tuning },
+                            colors: customColorsEnabled ? [...customColors] : undefined,
+                          })}
+                          aria-label="应用当前效果"
+                          title="应用当前效果"
+                        >
+                          ✦
+                        </button>
                         <button type="button" onClick={() => moveShowCue(index, -1)} disabled={index === 0} aria-label="上移">↑</button>
                         <button type="button" onClick={() => moveShowCue(index, 1)} disabled={index === showCues.length - 1} aria-label="下移">↓</button>
                         <button type="button" onClick={() => removeShowCue(cue.id)} aria-label="移除">×</button>
@@ -1004,7 +1226,7 @@ export function FireworkExperience() {
 
           {mode !== "show" ? (
             <div className="studio-footer">
-              <div className="palette-picker" aria-label="烟花配色">
+              <div className={`palette-picker ${customColorsEnabled ? "is-muted" : ""}`} aria-label="烟花配色">
                 {PALETTES.map((item) => (
                   <button
                     type="button"
@@ -1012,14 +1234,17 @@ export function FireworkExperience() {
                     className={palette === item.id ? "is-selected" : ""}
                     aria-label={item.name}
                     title={item.name}
-                    onClick={() => setPalette(item.id)}
+                    onClick={() => {
+                      setPalette(item.id);
+                      setCustomColorsEnabled(false);
+                    }}
                   >
                     {item.colors.map((color) => <i key={color} style={{ background: color }} />)}
                   </button>
                 ))}
               </div>
               <button type="button" className="launch-button" onClick={launchCurrent}>
-                <span>点亮夜空</span><i aria-hidden="true">↗</i>
+                <span>{mode === "effect" ? "试放当前效果" : "点亮夜空"}</span><i aria-hidden="true">↗</i>
               </button>
             </div>
           ) : (
