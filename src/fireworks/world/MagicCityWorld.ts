@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { EnvironmentPreset } from "../types";
 
 type Theme = {
@@ -109,6 +110,7 @@ export class MagicCityWorld {
   private readonly atmosphere = new THREE.Group();
   private readonly heroContainer = new THREE.Group();
   private readonly loader = new GLTFLoader();
+  private readonly dracoLoader = new DRACOLoader();
   private readonly ownedTextures: THREE.Texture[] = [];
   private readonly floatingLanterns: FloatingLantern[] = [];
   private readonly reactiveBursts: ReactiveBurst[] = [];
@@ -136,13 +138,26 @@ export class MagicCityWorld {
   private readonly hemisphere = new THREE.HemisphereLight(0x99baff, 0x180b18, 1.62);
   private readonly moonLight = new THREE.DirectionalLight(0xc8dcff, 3.25);
   private readonly cityGlow = new THREE.PointLight(0xff8c4b, 6.2, 78, 1.55);
+  private readonly companionTurn = new THREE.Quaternion();
+  private readonly companionBreath = new THREE.Quaternion();
+  private readonly companionTurnAxis = new THREE.Vector3(0, 1, 0);
+  private readonly companionBreathAxis = new THREE.Vector3(1, 0, 0);
+  private companionMixer: THREE.AnimationMixer | null = null;
+  private companionAnimationRoot: THREE.Object3D | null = null;
+  private companionHead: THREE.Bone | null = null;
+  private companionSpine: THREE.Bone | null = null;
+  private companionReaction = 0;
+  private companionReactionSide = 0;
   private disposed = false;
   private nextBurstSlot = 0;
 
   constructor(
     private readonly scene: THREE.Scene,
     private readonly renderer: THREE.WebGLRenderer,
+    private readonly onLoadProgress?: (progress: number) => void,
   ) {
+    this.dracoLoader.setDecoderPath("/draco/");
+    this.loader.setDRACOLoader(this.dracoLoader);
     this.root.name = "moonharbor-hero-world";
     this.atmosphere.name = "realtime-atmosphere";
     this.heroContainer.name = "authored-pbr-hero-asset";
@@ -190,10 +205,17 @@ export class MagicCityWorld {
     this.burstPositions[slot].copy(position);
     this.burstColors[slot].copy(color);
     this.burstIntensities[slot] = burst.power;
+    this.companionReaction = Math.max(
+      this.companionReaction,
+      THREE.MathUtils.clamp(power, 0.55, 1.8),
+    );
+    this.companionReactionSide = THREE.MathUtils.clamp(position.x / 16, -1, 1);
   }
 
   update(elapsed: number, delta: number) {
     this.waterUniforms.uTime.value = elapsed;
+    this.companionMixer?.update(delta);
+    this.updateCompanion(elapsed, delta);
     this.floatingLanterns.forEach((lantern) => {
       lantern.object.position.y = lantern.baseY + Math.sin(elapsed * lantern.speed + lantern.phase) * 0.24;
       lantern.object.rotation.y += delta * 0.08;
@@ -217,12 +239,29 @@ export class MagicCityWorld {
 
   dispose() {
     this.disposed = true;
+    this.companionMixer?.stopAllAction();
+    if (this.companionAnimationRoot) {
+      this.companionMixer?.uncacheRoot(this.companionAnimationRoot);
+    }
+    this.dracoLoader.dispose();
     this.scene.remove(this.root);
     this.ownedTextures.forEach((texture) => texture.dispose());
   }
 
   private async loadHeroAsset() {
-    const gltf = await this.loader.loadAsync("/models/hero-world.glb");
+    const gltf = await new Promise<GLTF>((resolve, reject) => {
+      this.loader.load(
+        "/models/hero-world.glb",
+        resolve,
+        (event) => {
+          const progress = event.total > 0
+            ? event.loaded / event.total
+            : Math.min(0.92, event.loaded / 10_000_000);
+          this.onLoadProgress?.(THREE.MathUtils.clamp(progress, 0, 0.98));
+        },
+        reject,
+      );
+    });
     if (this.disposed) {
       this.disposeObject(gltf.scene);
       return;
@@ -247,7 +286,43 @@ export class MagicCityWorld {
         }
       });
     });
+    gltf.scene.traverse((object) => {
+      if (object instanceof THREE.Bone) {
+        if (/Head$/i.test(object.name)) this.companionHead = object;
+        if (/Spine2$/i.test(object.name)) this.companionSpine = object;
+      }
+    });
+    if (gltf.animations.length) {
+      this.companionAnimationRoot = gltf.scene;
+      this.companionMixer = new THREE.AnimationMixer(gltf.scene);
+      const action = this.companionMixer.clipAction(gltf.animations[0]);
+      action.setLoop(THREE.LoopRepeat, Infinity);
+      action.timeScale = 0.82;
+      action.play();
+    }
     this.heroContainer.add(gltf.scene);
+    this.onLoadProgress?.(1);
+  }
+
+  private updateCompanion(elapsed: number, delta: number) {
+    const breathe = Math.sin(elapsed * 1.45) * 0.008;
+    const glance = Math.sin(elapsed * 0.19 + 0.8) * 0.025;
+    const reaction = this.companionReaction;
+    if (this.companionSpine) {
+      this.companionBreath.setFromAxisAngle(
+        this.companionBreathAxis,
+        breathe - reaction * 0.012,
+      );
+      this.companionSpine.quaternion.multiply(this.companionBreath);
+    }
+    if (this.companionHead) {
+      this.companionTurn.setFromAxisAngle(
+        this.companionTurnAxis,
+        glance + this.companionReactionSide * reaction * 0.055,
+      );
+      this.companionHead.quaternion.multiply(this.companionTurn);
+    }
+    this.companionReaction = Math.max(0, reaction - delta * 0.62);
   }
 
   private buildAtmosphere() {

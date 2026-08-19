@@ -13,6 +13,28 @@
   material tints, shared-material deduplication, WebP texture encoding and scene
   scale/layout changes.
 
-The seated companion, island shell, vegetation layout, furniture, cloth, hair,
-lighting response and realtime atmosphere are original procedural assets built
-for this project.
+## Microsoft Rocketbox — Female Party 02
+
+- Creator: Microsoft / Rocketbox Studios
+- Source: https://github.com/microsoft/Microsoft-Rocketbox
+- License: MIT; see `licenses/MICROSOFT_ROCKETBOX_LICENSE.md`
+- Used for: the seated companion's LOD0 body mesh, face, hands, hair cards,
+  81-bone source rig and 2048px color/normal/specular textures.
+- Changes: retargeted from the official seated breathing pose, given a compact
+  looping idle/reaction animation, placed on the terrace and encoded into the
+  final GLB with WebP textures. The runtime keeps the character skeleton for
+  breathing, head movement and firework reactions. Dormant facial morph targets
+  are omitted from this wide-shot scene; geometry is Draco-compressed at export.
+
+## 25 CC0 bang / firework SFX
+
+- Creator: rubberduck
+- Source: https://opengameart.org/content/25-cc0-bang-firework-sfx
+- License: CC0 1.0 Universal / Public Domain
+- Used for: nine recorded firework and cannon body samples in
+  `public/audio/fireworks/`, layered with the realtime spatial synthesis.
+- Changes: filenames normalized; playback pitch, distance filtering, HRTF
+  placement, reverberation and dynamic gain are applied at runtime.
+
+The island shell, vegetation layout, terrace furniture, lighting response and
+realtime atmosphere remain original project assets.

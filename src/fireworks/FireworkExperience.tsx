@@ -8,9 +8,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import {
-  FireworkScene,
-} from "./FireworkScene";
+import type { FireworkScene } from "./FireworkScene";
 import {
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_FIREWORK_TUNING,
@@ -27,25 +25,25 @@ import {
 } from "./types";
 
 const PATTERNS: Array<{ id: FireworkPattern; name: string; note: string; mark: string }> = [
-  { id: "peony", name: "星河牡丹", note: "层层绽放", mark: "✺" },
-  { id: "chrysanthemum", name: "极光千轮", note: "细密长尾", mark: "✹" },
-  { id: "heart", name: "心动时刻", note: "爱心定格", mark: "♥" },
-  { id: "saturn", name: "环游星球", note: "双环焰火", mark: "◎" },
-  { id: "willow", name: "金色垂柳", note: "坠入湖面", mark: "⌇" },
-  { id: "star", name: "摘一颗星", note: "星形留影", mark: "★" },
-  { id: "spiral", name: "三旋星涡", note: "旋臂展开", mark: "◌" },
-  { id: "butterfly", name: "流光蝶翼", note: "双翼定格", mark: "⋈" },
-  { id: "palm", name: "鎏金棕榈", note: "长枝垂落", mark: "Ψ" },
-  { id: "crown", name: "星光王冠", note: "冠冕成形", mark: "♕" },
-  { id: "double-ring", name: "双轨星环", note: "交错双环", mark: "⊚" },
-  { id: "meteor", name: "九曜流星", note: "长轨疾驰", mark: "彡" },
+  { id: "peony", name: "牡丹", note: "球形多层", mark: "✺" },
+  { id: "chrysanthemum", name: "菊型", note: "细丝长尾", mark: "✹" },
+  { id: "heart", name: "爱心", note: "轮廓成形", mark: "♥" },
+  { id: "saturn", name: "土星环", note: "中心与外环", mark: "◎" },
+  { id: "willow", name: "垂柳", note: "慢速下坠", mark: "⌇" },
+  { id: "star", name: "五角星", note: "清晰轮廓", mark: "★" },
+  { id: "spiral", name: "螺旋", note: "三臂旋开", mark: "◌" },
+  { id: "butterfly", name: "蝴蝶", note: "左右对称", mark: "⋈" },
+  { id: "palm", name: "棕榈", note: "长枝分叉", mark: "Ψ" },
+  { id: "crown", name: "皇冠", note: "上扬尖顶", mark: "♕" },
+  { id: "double-ring", name: "双环", note: "两圈交错", mark: "⊚" },
+  { id: "meteor", name: "流星", note: "高速长轨", mark: "彡" },
 ];
 
 const PALETTES: Array<{ id: PaletteName; name: string; colors: string[] }> = [
-  { id: "love", name: "心动玫瑰", colors: ["#ff4d9d", "#ff9aca", "#fff4f8"] },
-  { id: "aurora", name: "薄荷极光", colors: ["#36f1ca", "#6aa8ff", "#c379ff"] },
-  { id: "gold", name: "鎏金月色", colors: ["#ffad2f", "#ffe7a7", "#fff9dc"] },
-  { id: "dream", name: "银河幻梦", colors: ["#705cff", "#26d6ff", "#ff4ddd"] },
+  { id: "love", name: "玫红", colors: ["#ff4d9d", "#ff9aca", "#fff4f8"] },
+  { id: "aurora", name: "极光", colors: ["#36f1ca", "#6aa8ff", "#c379ff"] },
+  { id: "gold", name: "暖金", colors: ["#ffad2f", "#ffe7a7", "#fff9dc"] },
+  { id: "dream", name: "蓝紫", colors: ["#705cff", "#26d6ff", "#ff4ddd"] },
 ];
 
 type StudioMode = "text" | "pattern" | "draw" | "effect" | "show";
@@ -53,10 +51,10 @@ type StudioMode = "text" | "pattern" | "draw" | "effect" | "show";
 type NumericTuningKey = "power" | "spread" | "lifetime" | "trail";
 
 const LAUNCH_STYLES: Array<{ id: FireworkLaunchStyle; name: string; note: string; mark: string }> = [
-  { id: "classic", name: "经典升空", note: "干净直线", mark: "↑" },
-  { id: "comet", name: "彗星长尾", note: "长轨慢升", mark: "↗" },
-  { id: "spiral", name: "螺旋升空", note: "盘旋入夜", mark: "↻" },
-  { id: "twin", name: "双星齐发", note: "双束呼应", mark: "⇈" },
+  { id: "classic", name: "直线", note: "标准速度", mark: "↑" },
+  { id: "comet", name: "彗星", note: "长尾慢升", mark: "↗" },
+  { id: "spiral", name: "螺旋", note: "盘旋上升", mark: "↻" },
+  { id: "twin", name: "双发", note: "两束同步", mark: "⇈" },
 ];
 
 const DISSIPATIONS: Array<{ id: FireworkDissipation; name: string; note: string }> = [
@@ -87,9 +85,9 @@ const ENVIRONMENTS: Array<{
   note: string;
   mark: string;
 }> = [
-  { id: "moon-castle", name: "星月浮灯", note: "蓝调月夜", mark: "☾" },
-  { id: "rose-garden", name: "蔷薇庆典", note: "暖粉花瓣", mark: "✿" },
-  { id: "cloud-observatory", name: "秘法星潮", note: "青蓝星环", mark: "◌" },
+  { id: "moon-castle", name: "月港", note: "冷色月光", mark: "☾" },
+  { id: "rose-garden", name: "蔷薇露台", note: "暖色灯光", mark: "✿" },
+  { id: "cloud-observatory", name: "观星台", note: "青蓝夜空", mark: "◌" },
 ];
 
 const DEFAULT_SHOW: ShowCue[] = [
@@ -102,28 +100,33 @@ const DEFAULT_SHOW: ShowCue[] = [
 
 const SHOW_DELAYS = [0.4, 0.7, 1, 1.4, 2];
 
-const SHUTTER_OPTIONS = [1 / 15, 1 / 30, 1 / 60, 1 / 125, 1 / 250, 1 / 500];
+const SHUTTER_OPTIONS = [2, 1, 1 / 2, 1 / 4, 1 / 8, 1 / 15, 1 / 30, 1 / 60, 1 / 125, 1 / 250, 1 / 500];
 const ISO_OPTIONS = [100, 200, 320, 400, 800, 1600];
 
 const CAMERA_PRESETS: Array<{ name: string; note: string; settings: CameraSettings }> = [
   {
-    name: "夜景清透",
-    note: "颜色分明",
+    name: "长曝光",
+    note: "1 s 光轨",
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 8, shutterSeconds: 1, iso: 100, bloom: 0.2, filter: "cinema" },
+  },
+  {
+    name: "夜景",
+    note: "低辉光",
     settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 4, iso: 320, bloom: 0.3, filter: "neutral" },
   },
   {
-    name: "电影柔光",
-    note: "柔和景深",
+    name: "浅景深",
+    note: "F2.0",
     settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 35, aperture: 2, iso: 400, bloom: 0.46, filter: "cinema" },
   },
   {
-    name: "玫瑰胶片",
-    note: "暖粉肤色",
+    name: "暖色",
+    note: "50 mm",
     settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 50, aperture: 1.8, iso: 320, bloom: 0.38, filter: "rose" },
   },
   {
-    name: "冷月长焦",
-    note: "压缩远景",
+    name: "长焦",
+    note: "70 mm",
     settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 70, aperture: 4.5, iso: 800, bloom: 0.24, filter: "moonlight" },
   },
 ];
@@ -134,6 +137,11 @@ const FILTERS: Array<{ id: CameraFilter; name: string }> = [
   { id: "rose", name: "玫瑰" },
   { id: "moonlight", name: "冷月" },
 ];
+
+function formatShutter(seconds: number) {
+  if (seconds >= 1) return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)} s`;
+  return `1/${Math.round(1 / seconds)} s`;
+}
 
 function sampleText(text: string): PatternPoint[] {
   const canvas = document.createElement("canvas");
@@ -233,8 +241,13 @@ export function FireworkExperience() {
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDrawingRef = useRef(false);
   const lastDrawPointRef = useRef<{ x: number; y: number } | null>(null);
+  const chromeTimerRef = useRef<number | null>(null);
+  const musicDuckTimerRef = useRef<number | null>(null);
+  const musicVolumeRef = useRef(0.34);
   const [ready, setReady] = useState(false);
-  const [studioOpen, setStudioOpen] = useState(true);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const [studioOpen, setStudioOpen] = useState(false);
   const [mode, setMode] = useState<StudioMode>("text");
   const [message, setMessage] = useState("今晚也很喜欢你");
   const [pattern, setPattern] = useState<FireworkPattern>("heart");
@@ -257,19 +270,57 @@ export function FireworkExperience() {
   const [musicVolume, setMusicVolume] = useState(0.34);
   const [musicName, setMusicName] = useState("降 E 大调夜曲");
   const [showCues, setShowCues] = useState<ShowCue[]>(DEFAULT_SHOW);
-  const [status, setStatus] = useState("烟火正在为你们升空");
+  const [showPlaying, setShowPlaying] = useState(false);
+  const [showProgress, setShowProgress] = useState(0);
+  const [showChapter, setShowChapter] = useState("序幕");
+  const [status, setStatus] = useState("系统就绪");
+
+  const duckMusic = useCallback((intensity: number) => {
+    const audio = audioRef.current;
+    if (!audio || audio.paused) return;
+    const baseVolume = musicVolumeRef.current;
+    audio.volume = Math.max(0.05, baseVolume * (0.72 - Math.min(1.7, intensity) * 0.08));
+    if (musicDuckTimerRef.current !== null) window.clearTimeout(musicDuckTimerRef.current);
+    musicDuckTimerRef.current = window.setTimeout(() => {
+      if (audioRef.current) audioRef.current.volume = musicVolumeRef.current;
+    }, 520);
+  }, []);
 
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    const scene = new FireworkScene(viewport, () => setReady(true));
-    sceneRef.current = scene;
+    let active = true;
+    let mountedScene: FireworkScene | null = null;
+    setLoadProgress(0.03);
+    void import("./FireworkScene").then(({ FireworkScene: FireworkSceneRuntime }) => {
+      if (!active) return;
+      mountedScene = new FireworkSceneRuntime(viewport, {
+        onReady: () => {
+          if (active) setReady(true);
+        },
+        onLoadProgress: (progress) => {
+          if (active) setLoadProgress(progress);
+        },
+        onImpact: duckMusic,
+        onShowProgress: (progress, chapter, isActive) => {
+          if (!active) return;
+          setShowProgress(progress);
+          setShowChapter(chapter);
+          setShowPlaying(isActive);
+          if (!isActive) setAutoPlay(true);
+        },
+      });
+      sceneRef.current = mountedScene;
+    });
     return () => {
-      scene.dispose();
-      sceneRef.current = null;
+      active = false;
+      mountedScene?.dispose();
+      if (sceneRef.current === mountedScene) sceneRef.current = null;
+      if (chromeTimerRef.current !== null) window.clearTimeout(chromeTimerRef.current);
+      if (musicDuckTimerRef.current !== null) window.clearTimeout(musicDuckTimerRef.current);
       if (uploadedMusicUrlRef.current) URL.revokeObjectURL(uploadedMusicUrlRef.current);
     };
-  }, []);
+  }, [duckMusic]);
 
   useEffect(() => {
     const canvas = drawingCanvasRef.current;
@@ -288,12 +339,33 @@ export function FireworkExperience() {
   }, [environment]);
 
   useEffect(() => {
+    musicVolumeRef.current = musicVolume;
     if (audioRef.current) audioRef.current.volume = musicVolume;
   }, [musicVolume]);
 
+  const chromeLocked = studioOpen || photoMode || activePopover !== null;
+
+  const revealChrome = useCallback(() => {
+    setChromeVisible(true);
+    if (chromeTimerRef.current !== null) window.clearTimeout(chromeTimerRef.current);
+    if (!chromeLocked && ready) {
+      chromeTimerRef.current = window.setTimeout(() => setChromeVisible(false), 3600);
+    }
+  }, [chromeLocked, ready]);
+
+  useEffect(() => {
+    if (chromeTimerRef.current !== null) window.clearTimeout(chromeTimerRef.current);
+    if (!chromeLocked && ready) {
+      chromeTimerRef.current = window.setTimeout(() => setChromeVisible(false), 3600);
+    }
+    return () => {
+      if (chromeTimerRef.current !== null) window.clearTimeout(chromeTimerRef.current);
+    };
+  }, [chromeLocked, ready]);
+
   const announce = useCallback((nextStatus: string) => {
     setStatus(nextStatus);
-    window.setTimeout(() => setStatus("点击夜空，也能亲手放一束烟花"), 2400);
+    window.setTimeout(() => setStatus("点击天空发射"), 2400);
   }, []);
 
   const effectOptions = useCallback(
@@ -307,9 +379,9 @@ export function FireworkExperience() {
   const setPhotoModeActive = useCallback(
     (active: boolean) => {
       setPhotoMode(active);
-      setPhotoPaused(active);
-      sceneRef.current?.setPaused(active);
-      announce(active ? "摄像模式已开启，时间停在这一帧" : "已经回到实时烟花夜");
+      setPhotoPaused(false);
+      sceneRef.current?.setPaused(false);
+      announce(active ? "摄影模式已开启" : "已返回观赏模式");
     },
     [announce],
   );
@@ -322,12 +394,12 @@ export function FireworkExperience() {
     const next = !photoPaused;
     setPhotoPaused(next);
     sceneRef.current?.setPaused(next);
-    announce(next ? "画面已暂停，可以慢慢调参数" : "烟花重新开始流动");
+    announce(next ? "画面已暂停" : "画面继续播放");
   }, [announce, photoPaused]);
 
   const resetCamera = useCallback(() => {
     sceneRef.current?.resetView();
-    announce("视角已回到双人座位");
+    announce("视角已复位");
   }, [announce]);
 
   useEffect(() => {
@@ -360,7 +432,7 @@ export function FireworkExperience() {
       const points = sampleText(cleanMessage);
       if (finale) {
         sceneRef.current?.launchFinale(points, palette, effectOptions());
-        announce(`整片夜空，正在写下「${cleanMessage}」`);
+        announce(`开始播放文字编排：${cleanMessage}`);
       } else {
         sceneRef.current?.launch({
           pattern: "text",
@@ -371,7 +443,7 @@ export function FireworkExperience() {
           z: -22,
           ...effectOptions(),
         });
-        announce(`「${cleanMessage}」已经飞向夜空`);
+        announce(`已发射文字：${cleanMessage}`);
       }
     },
     [announce, effectOptions, message, palette],
@@ -380,7 +452,7 @@ export function FireworkExperience() {
   const launchSelectedPattern = useCallback(() => {
     sceneRef.current?.launch({ pattern, palette, ...effectOptions() });
     const selected = PATTERNS.find((item) => item.id === pattern);
-    announce(`${selected?.name ?? "烟花"}，为你们绽放`);
+    announce(`已发射：${selected?.name ?? "烟花"}`);
   }, [announce, effectOptions, palette, pattern]);
 
   const launchDrawing = useCallback(() => {
@@ -396,7 +468,7 @@ export function FireworkExperience() {
       z: -22,
       ...effectOptions(),
     });
-    announce("你画下的形状，正在变成烟花");
+    announce("已发射手绘图案");
   }, [announce, effectOptions, palette]);
 
   const launchCurrent = () => {
@@ -409,20 +481,20 @@ export function FireworkExperience() {
     const next = !sound;
     setSound(next);
     sceneRef.current?.setSoundEnabled(next);
-    announce(next ? "声音已开启，今晚更有临场感" : "已切回安静观赏");
+    announce(next ? "烟花音效已开启" : "烟花音效已关闭");
   };
 
   const toggleAutoPlay = () => {
     const next = !autoPlay;
     setAutoPlay(next);
     sceneRef.current?.setAutoPlay(next);
-    announce(next ? "烟花会继续自动绽放" : "夜空交给你亲手点亮");
+    announce(next ? "自动发射已开启" : "自动发射已关闭");
   };
 
   const chooseEnvironment = (next: EnvironmentPreset, name: string) => {
     setEnvironment(next);
     sceneRef.current?.setEnvironment(next);
-    announce(`夜色已经换成${name}`);
+    announce(`场景：${name}`);
   };
 
   const toggleMusic = async () => {
@@ -441,7 +513,7 @@ export function FireworkExperience() {
     }
   };
 
-  const useBuiltInMusic = async () => {
+  const playBuiltInMusic = async () => {
     const audio = audioRef.current;
     if (!audio) return;
     if (uploadedMusicUrlRef.current) {
@@ -459,7 +531,7 @@ export function FireworkExperience() {
     }
   };
 
-  const useLocalMusic = async (file?: File) => {
+  const playLocalMusic = async (file?: File) => {
     const audio = audioRef.current;
     if (!audio || !file) return;
     if (uploadedMusicUrlRef.current) URL.revokeObjectURL(uploadedMusicUrlRef.current);
@@ -474,6 +546,41 @@ export function FireworkExperience() {
     } catch {
       setMusicPlaying(false);
     }
+  };
+
+  const toggleCinematicShow = async () => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (showPlaying) {
+      scene.stopCinematicShow(true);
+      setShowPlaying(false);
+      setAutoPlay(true);
+      announce("演出已结束");
+      return;
+    }
+
+    setStudioOpen(false);
+    setActivePopover(null);
+    setAutoPlay(false);
+    setSound(true);
+    setPhotoMode(false);
+    setPhotoPaused(false);
+    scene.setPaused(false);
+    scene.setSoundEnabled(true);
+    const audio = audioRef.current;
+    if (audio?.paused) {
+      try {
+        await audio.play();
+      } catch {
+        setMusicPlaying(false);
+      }
+    }
+    const cleanMessage = message.trim().slice(0, 14) || "今晚也很喜欢你";
+    scene.playCinematicShow(sampleText(cleanMessage), palette);
+    setShowPlaying(true);
+    setShowProgress(0);
+    setShowChapter("序幕");
+    announce("演出开始");
   };
 
   const addShowCue = () => {
@@ -513,7 +620,7 @@ export function FireworkExperience() {
     if (!showCues.length) return;
     setAutoPlay(false);
     sceneRef.current?.launchSequence(showCues);
-    announce(`属于你们的 ${showCues.length} 幕烟花秀开始了`);
+    announce(`开始播放 ${showCues.length} 个编排节点`);
   };
 
   const updateCameraSettings = (patch: Partial<CameraSettings>) => {
@@ -522,7 +629,7 @@ export function FireworkExperience() {
 
   const applyCameraPreset = (settings: CameraSettings, name: string) => {
     setCameraSettings({ ...settings });
-    announce(`已切换到「${name}」镜头预设`);
+    announce(`摄影预设：${name}`);
   };
 
   const capturePhoto = () => {
@@ -530,9 +637,9 @@ export function FireworkExperience() {
     if (!image) return;
     const link = document.createElement("a");
     link.href = image;
-    link.download = `our-firework-night-${Date.now()}.png`;
+    link.download = `firework-frame-${Date.now()}.png`;
     link.click();
-    announce("这一帧已经保存下来");
+    announce("照片已保存");
   };
 
   const handleSkyPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -550,7 +657,7 @@ export function FireworkExperience() {
       palette,
       ...effectOptions(),
     });
-    announce("这一束，落在你点中的位置");
+    announce("已在指定位置发射");
   };
 
   const drawingPosition = (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -606,8 +713,10 @@ export function FireworkExperience() {
   return (
     <main
       ref={rootRef}
-      className={`firework-shell ${ready ? "is-ready" : ""} ${photoMode ? "is-photo-mode" : ""}`}
+      className={`firework-shell ${ready ? "is-ready" : ""} ${photoMode ? "is-photo-mode" : ""} ${chromeVisible ? "" : "is-chrome-idle"}`}
       data-testid="firework-night"
+      onPointerMove={revealChrome}
+      onPointerDownCapture={revealChrome}
     >
       <div
         ref={viewportRef}
@@ -615,6 +724,8 @@ export function FireworkExperience() {
         onPointerDown={handleSkyPointerDown}
         onPointerUp={handleSkyPointerUp}
       />
+      {/* Instrumental background music has no spoken or lyrical content. */}
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <audio
         ref={audioRef}
         src="/nocturne-op9-no2.mp3"
@@ -628,25 +739,32 @@ export function FireworkExperience() {
       <div className="vignette" aria-hidden="true" />
 
       <div className="loading-curtain" aria-hidden="true">
-        <span />
-        <p>正在点亮今晚的星星</p>
+        <div className="loading-mark">花</div>
+        <p>花火正在点亮夜空</p>
+        <div className="loading-progress"><i style={{ width: `${Math.round(loadProgress * 100)}%` }} /></div>
+        <small>{Math.round(loadProgress * 100)}%</small>
       </div>
 
       <header className="topbar">
+        <div className="window-controls" aria-hidden="true"><i /><i /><i /></div>
         <div className="brand-lockup">
-          <p className="eyebrow"><span>✦</span> OUR LITTLE UNIVERSE · 2026</p>
-          <h1>只属于我们的烟火</h1>
-          <p className="subtitle">坐近一点，今晚的星光会记得我们。</p>
+          <span className="app-icon" aria-hidden="true">花</span>
+          <div>
+            <h1>花火</h1>
+            <p className="subtitle">{ENVIRONMENTS.find((item) => item.id === environment)?.name}</p>
+          </div>
         </div>
 
-        <div className="utility-actions" aria-label="观景设置">
+        <div className="scene-live-status"><i /> 实时</div>
+
+        <nav className="utility-actions" aria-label="场景工具">
           <button
             type="button"
             className={activePopover === "atmosphere" ? "is-active" : ""}
             onClick={() => setActivePopover((current) => (current === "atmosphere" ? null : "atmosphere"))}
           >
             <span aria-hidden="true">☾</span>
-            夜色
+            场景
           </button>
           <button
             type="button"
@@ -662,25 +780,38 @@ export function FireworkExperience() {
           </button>
           <button type="button" className={autoPlay ? "is-active" : ""} onClick={toggleAutoPlay}>
             <span aria-hidden="true">∞</span>
-            连放
+            自动
+          </button>
+          <button type="button" className={showPlaying ? "is-active show-action" : "show-action"} onClick={() => void toggleCinematicShow()}>
+            <span aria-hidden="true">▶</span>
+            {showPlaying ? "结束" : "演出"}
           </button>
           <button type="button" className={photoMode ? "is-active" : ""} onClick={togglePhotoMode}>
             <span aria-hidden="true">◉</span>
-            摄像
+            摄影
           </button>
           <button type="button" onClick={toggleFullscreen}>
             <span aria-hidden="true">⌗</span>
-            沉浸
+            全屏
           </button>
-        </div>
+        </nav>
       </header>
+
+      <section className={`show-now-playing ${showPlaying ? "is-open" : ""}`} aria-live="polite">
+        <div>
+          <small>花火</small>
+          <strong>{showChapter}</strong>
+        </div>
+        <i><b style={{ width: `${showProgress * 100}%` }} /></i>
+        <button type="button" onClick={() => void toggleCinematicShow()} aria-label="结束演出">■</button>
+      </section>
 
       <section className={`experience-popover scene-popover ${activePopover === "atmosphere" ? "is-open" : ""}`} aria-label="夜色氛围">
         <header>
-          <div><small>月港王城 · 此刻夜色</small><strong>{ENVIRONMENTS.find((item) => item.id === environment)?.name}</strong></div>
+          <div><small>SCENE</small><strong>{ENVIRONMENTS.find((item) => item.id === environment)?.name}</strong></div>
           <button type="button" onClick={() => setActivePopover(null)} aria-label="关闭">×</button>
         </header>
-        <div className="scene-section-title"><span>光影氛围</span><small>同步改变天空、湖面与城堡光色</small></div>
+        <div className="scene-section-title"><span>环境预设</span><small>天空、湖面与主光源</small></div>
         <div className="atmosphere-options">
           {ENVIRONMENTS.map((item) => (
             <button
@@ -698,7 +829,7 @@ export function FireworkExperience() {
 
       <section className={`experience-popover music-popover ${activePopover === "music" ? "is-open" : ""}`} aria-label="背景音乐">
         <header>
-          <div><small>正在播放</small><strong>{musicName}</strong></div>
+          <div><small>MUSIC</small><strong>{musicName}</strong></div>
           <button type="button" onClick={() => setActivePopover(null)} aria-label="关闭">×</button>
         </header>
         <div className="music-player">
@@ -722,25 +853,25 @@ export function FireworkExperience() {
           <output>{Math.round(musicVolume * 100)}</output>
         </label>
         <div className="music-sources">
-          <button type="button" onClick={() => void useBuiltInMusic()}>肖邦夜曲</button>
+          <button type="button" onClick={() => void playBuiltInMusic()}>肖邦夜曲</button>
           <label>
             选择本地音乐
-            <input type="file" accept="audio/*" onChange={(event) => void useLocalMusic(event.target.files?.[0])} />
+            <input type="file" accept="audio/*" onChange={(event) => void playLocalMusic(event.target.files?.[0])} />
           </label>
         </div>
       </section>
 
       <div className="photo-mode-indicator" aria-hidden={!photoMode}>
         <span className={photoPaused ? "is-paused" : ""} />
-        <strong>摄像模式</strong>
+          <strong>摄影模式</strong>
         <small>{photoPaused ? "画面暂停" : "实时"}</small>
       </div>
 
       <section className={`camera-console ${photoMode ? "is-open" : ""}`} aria-label="专业摄像参数">
         <header className="camera-console-header">
           <div>
-            <p>PRO CAMERA / 眼睛视角</p>
-            <h2>专业摄像台</h2>
+            <p>CAMERA</p>
+            <h2>摄影参数</h2>
           </div>
           <button type="button" onClick={() => setPhotoModeActive(false)} aria-label="退出摄像模式">×</button>
         </header>
@@ -748,7 +879,7 @@ export function FireworkExperience() {
         <div className="camera-readout" aria-label="当前曝光参数">
           <span><small>LENS</small><strong>{cameraSettings.focalLength.toFixed(0)}<i>mm</i></strong></span>
           <span><small>IRIS</small><strong>ƒ/{cameraSettings.aperture.toFixed(1)}</strong></span>
-          <span><small>SHUTTER</small><strong>1/{Math.round(1 / cameraSettings.shutterSeconds)}</strong></span>
+          <span><small>SHUTTER</small><strong>{formatShutter(cameraSettings.shutterSeconds)}</strong></span>
           <span><small>SENSOR</small><strong>ISO {cameraSettings.iso}</strong></span>
         </div>
 
@@ -791,7 +922,7 @@ export function FireworkExperience() {
           </label>
           <label>
             <span><strong>快门</strong><small>SHUTTER SPEED</small></span>
-            <output>1/{Math.round(1 / cameraSettings.shutterSeconds)} s</output>
+            <output>{formatShutter(cameraSettings.shutterSeconds)}</output>
             <input
               type="range"
               min="0"
@@ -840,7 +971,7 @@ export function FireworkExperience() {
         </div>
 
         <div className="filter-strip">
-          <span>FILTER / 滤镜</span>
+          <span>滤镜</span>
           <div>
             {FILTERS.map((filter) => (
               <button
@@ -885,7 +1016,7 @@ export function FireworkExperience() {
           onClick={() => setStudioOpen((current) => !current)}
           aria-expanded={studioOpen}
         >
-          <span><i aria-hidden="true">✦</i> 烟花工坊</span>
+          <span><i aria-hidden="true">花</i> 烟火编辑器</span>
           <b aria-hidden="true">{studioOpen ? "⌄" : "⌃"}</b>
         </button>
 
@@ -934,13 +1065,13 @@ export function FireworkExperience() {
               className={mode === "show" ? "is-selected" : ""}
               onClick={() => setMode("show")}
             >
-              烟花组
+              编排
             </button>
           </div>
 
           {mode === "text" && (
             <div className="text-composer" role="tabpanel">
-              <label htmlFor="firework-message">想让夜空替你说什么？</label>
+              <label htmlFor="firework-message">显示文字</label>
               <div className="message-field">
                 <input
                   id="firework-message"
@@ -950,12 +1081,12 @@ export function FireworkExperience() {
                   onKeyDown={(event) => {
                     if (event.key === "Enter") launchText(false);
                   }}
-                  placeholder="输入只属于她的话"
+                  placeholder="输入文字"
                 />
                 <span>{message.length}/14</span>
               </div>
               <div className="quick-messages" aria-label="快捷文案">
-                {["我喜欢你", "永远在一起", "今晚只看你"].map((item) => (
+                {["我喜欢你", "生日快乐", "永远在一起"].map((item) => (
                   <button type="button" key={item} onClick={() => setMessage(item)}>{item}</button>
                 ))}
               </div>
@@ -981,7 +1112,7 @@ export function FireworkExperience() {
           {mode === "draw" && (
             <div className="drawing-panel" role="tabpanel">
               <div className="drawing-copy">
-                <span>自由画板</span>
+                <span>手绘图案</span>
                 <button type="button" onClick={clearDrawing}>清空</button>
               </div>
               <div className="drawing-board">
@@ -1004,8 +1135,8 @@ export function FireworkExperience() {
             <div className="effect-panel" role="tabpanel">
               <header className="effect-panel-header">
                 <div>
-                  <strong>烟花动力学</strong>
-                  <span>这些参数会应用到手动烟花，也会随新加入的烟花组保存</span>
+                  <strong>发射与爆炸</strong>
+                  <span>当前参数会写入新编排节点</span>
                 </div>
                 <button
                   type="button"
@@ -1081,7 +1212,7 @@ export function FireworkExperience() {
                   aria-pressed={customColorsEnabled}
                   onClick={() => setCustomColorsEnabled((current) => !current)}
                 >
-                  <span><b>自定义三色焰心</b><small>关闭时沿用主题配色</small></span>
+                  <span><b>自定义颜色</b><small>最多三色</small></span>
                   <i aria-hidden="true" />
                 </button>
                 <div className="custom-color-inputs" aria-hidden={!customColorsEnabled}>
@@ -1108,7 +1239,7 @@ export function FireworkExperience() {
             <div className="show-composer" role="tabpanel">
               <div className="show-add-row">
                 <label>
-                  <span>烟花 · 当前效果会随这一幕保存</span>
+                  <span>新增节点</span>
                   <select value={pattern} onChange={(event) => setPattern(event.target.value as FireworkPattern)}>
                     {PATTERNS.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
                   </select>
@@ -1205,14 +1336,14 @@ export function FireworkExperience() {
                 ))}
               </div>
               <button type="button" className="launch-button" onClick={launchCurrent}>
-                <span>{mode === "effect" ? "试放当前效果" : "点亮夜空"}</span><i aria-hidden="true">↗</i>
+                <span>{mode === "effect" ? "试放" : "发射"}</span><i aria-hidden="true">↗</i>
               </button>
             </div>
           ) : (
             <div className="show-footer">
               <button type="button" className="clear-show-button" onClick={() => setShowCues([])}>清空</button>
               <button type="button" className="launch-button" onClick={playShow} disabled={!showCues.length}>
-                <span>播放烟花组</span><i aria-hidden="true">▶</i>
+                <span>播放编排</span><i aria-hidden="true">▶</i>
               </button>
             </div>
           )}
@@ -1220,8 +1351,8 @@ export function FireworkExperience() {
           {mode === "text" && (
             <button type="button" className="finale-button" onClick={() => launchText(true)}>
               <span aria-hidden="true">✦</span>
-              用这句话，放一场完整烟花秀
-              <i aria-hidden="true">7 秒</i>
+              播放文字编排
+              <i aria-hidden="true">7 s</i>
             </button>
           )}
         </div>

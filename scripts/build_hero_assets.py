@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Iterable
 
 import bpy
-from mathutils import Euler, Matrix, Vector
+from mathutils import Euler, Matrix, Quaternion, Vector
 
 
 WALL_HEIGHT = 3.123
@@ -29,12 +29,30 @@ MODULE_WIDTH = 2.0
 KIT_DEFAULT = Path(
     "/private/tmp/medieval-megakit/Medieval Village MegaKit[Standard]/glTF"
 )
+ROCKETBOX_DEFAULT = Path(
+    "/private/tmp/microsoft-rocketbox/Assets/Avatars/Adults/Female_Party_02"
+)
+ROCKETBOX_POSE_DEFAULT = Path(
+    "/private/tmp/microsoft-rocketbox/Assets/Animations/"
+    "all_animations_max_motextr_static/f_sit_chair_breathe_01.max.fbx"
+)
 
 
 def parse_args() -> argparse.Namespace:
     extra = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     parser = argparse.ArgumentParser()
     parser.add_argument("--kit", type=Path, default=KIT_DEFAULT)
+    parser.add_argument(
+        "--companion",
+        type=Path,
+        default=ROCKETBOX_DEFAULT / "Export/Female_Party_02_facial.fbx",
+    )
+    parser.add_argument(
+        "--companion-textures",
+        type=Path,
+        default=ROCKETBOX_DEFAULT / "Textures",
+    )
+    parser.add_argument("--companion-pose", type=Path, default=ROCKETBOX_POSE_DEFAULT)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--preview", type=Path)
     return parser.parse_args(extra)
@@ -220,6 +238,7 @@ def add_box(
     size: tuple[float, float, float],
     material: bpy.types.Material,
     bevel: float = 0.08,
+    bevel_segments: int = 3,
     rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
     parent: bpy.types.Object | None = None,
 ) -> bpy.types.Object:
@@ -233,8 +252,9 @@ def add_box(
     if bevel > 0:
         modifier = obj.modifiers.new("Soft carved edges", "BEVEL")
         modifier.width = bevel
-        modifier.segments = 3
+        modifier.segments = bevel_segments
         modifier.limit_method = "ANGLE"
+        modifier.harden_normals = True
     if parent is not None:
         obj.parent = parent
     return obj
@@ -255,6 +275,43 @@ def add_uv_sphere(
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     move_to_collection(obj, collection)
     obj.data.materials.append(material)
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
+    if parent is not None:
+        obj.parent = parent
+    return obj
+
+
+def add_cylinder(
+    collection: bpy.types.Collection,
+    name: str,
+    location: tuple[float, float, float],
+    radius: float,
+    depth: float,
+    material: bpy.types.Material,
+    *,
+    vertices: int = 48,
+    bevel: float = 0.03,
+    rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    parent: bpy.types.Object | None = None,
+) -> bpy.types.Object:
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=vertices,
+        radius=radius,
+        depth=depth,
+        location=location,
+        rotation=rotation,
+    )
+    obj = bpy.context.object
+    obj.name = name
+    move_to_collection(obj, collection)
+    obj.data.materials.append(material)
+    if bevel > 0:
+        modifier = obj.modifiers.new("Machined edge bevel", "BEVEL")
+        modifier.width = bevel
+        modifier.segments = 4
+        modifier.limit_method = "ANGLE"
+        modifier.harden_normals = True
     for polygon in obj.data.polygons:
         polygon.use_smooth = True
     if parent is not None:
@@ -494,343 +551,388 @@ def create_terrace(
                 parent=parent,
             )
 
-    # Substantial, softened timber bench with separate velvet cushions.
-    add_box(collection, "Bench seat", (0, -4.35, 1.0), (6.5, 1.35, 0.28), materials["wood"], 0.12, parent=parent)
-    add_box(collection, "Bench back", (0, -4.98, 1.72), (6.5, 0.25, 1.45), materials["wood"], 0.11, rotation=(math.radians(-6), 0, 0), parent=parent)
-    for x in (-2.65, 2.65):
-        add_box(collection, f"Bench leg {x:+.1f}", (x, -4.35, 0.53), (0.34, 0.92, 0.94), materials["metal"], 0.07, parent=parent)
-    for x in (-1.55, 0.0, 1.55):
-        add_box(collection, f"Velvet cushion {x:+.1f}", (x, -4.28, 1.19), (1.42, 1.06, 0.2), materials["velvet"], 0.18, parent=parent)
-
-    # Carpet and small foreground props break up tiling in the closest metre.
-    add_box(collection, "Woven night carpet", (0, -7.2, 0.2), (4.8, 3.2, 0.08), materials["carpet"], 0.08, parent=parent)
-    for x in (-7.8, 7.8):
-        add_box(collection, f"Lantern plinth {x:+.1f}", (x, 0.75, 0.55), (0.62, 0.62, 1.0), materials["rock"], 0.08, parent=parent)
-        add_box(collection, f"Lantern glass {x:+.1f}", (x, 0.75, 1.28), (0.36, 0.36, 0.48), materials["lantern"], 0.07, parent=parent)
-        add_box(collection, f"Lantern cap {x:+.1f}", (x, 0.75, 1.58), (0.48, 0.48, 0.13), materials["metal"], 0.05, parent=parent)
-
-
-def add_ellipsoid(
-    collection: bpy.types.Collection,
-    name: str,
-    location: tuple[float, float, float],
-    scale: tuple[float, float, float],
-    material: bpy.types.Material,
-    parent: bpy.types.Object,
-) -> bpy.types.Object:
-    bpy.ops.mesh.primitive_uv_sphere_add(
-        segments=48,
-        ring_count=32,
-        location=location,
-    )
-    obj = bpy.context.object
-    obj.name = name
-    obj.scale = scale
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    move_to_collection(obj, collection)
-    obj.data.materials.append(material)
-    for polygon in obj.data.polygons:
-        polygon.use_smooth = True
-    obj.parent = parent
-    return obj
-
-
-def add_limb(
-    collection: bpy.types.Collection,
-    name: str,
-    start: tuple[float, float, float],
-    end: tuple[float, float, float],
-    start_radius: float,
-    end_radius: float,
-    material: bpy.types.Material,
-    parent: bpy.types.Object,
-) -> bpy.types.Object:
-    start_vector = Vector(start)
-    end_vector = Vector(end)
-    direction = end_vector - start_vector
-    bpy.ops.mesh.primitive_cone_add(
-        vertices=32,
-        radius1=end_radius,
-        radius2=start_radius,
-        depth=direction.length,
-        location=(start_vector + end_vector) / 2,
-    )
-    obj = bpy.context.object
-    obj.name = name
-    obj.rotation_euler = direction.to_track_quat("Z", "Y").to_euler()
-    move_to_collection(obj, collection)
-    obj.data.materials.append(material)
-    bevel = obj.modifiers.new("Anatomical softness", "BEVEL")
-    bevel.width = min(start_radius, end_radius) * 0.34
-    bevel.segments = 3
-    for polygon in obj.data.polygons:
-        polygon.use_smooth = True
-    obj.parent = parent
-    return obj
-
-
-def add_fabric_shell(
-    collection: bpy.types.Collection,
-    name: str,
-    rings: list[tuple[float, float, float, float]],
-    material: bpy.types.Material,
-    parent: bpy.types.Object,
-    segments: int = 40,
-) -> bpy.types.Object:
-    """Create a smooth elliptical cloth volume from z/y/radius rings."""
-    center_x = 0.9
-    vertices: list[tuple[float, float, float]] = []
-    for z, center_y, radius_x, radius_y in rings:
-        for index in range(segments):
-            angle = index / segments * math.tau
-            vertices.append(
-                (
-                    center_x + math.cos(angle) * radius_x,
-                    center_y + math.sin(angle) * radius_y,
-                    z,
-                )
-            )
-    faces: list[tuple[int, int, int, int]] = []
-    for ring_index in range(len(rings) - 1):
-        for index in range(segments):
-            current = ring_index * segments + index
-            following = ring_index * segments + (index + 1) % segments
-            faces.append(
-                (
-                    current,
-                    following,
-                    following + segments,
-                    current + segments,
-                )
-            )
-    mesh = bpy.data.meshes.new(f"{name} mesh")
-    mesh.from_pydata(vertices, [], faces)
-    mesh.update()
-    obj = bpy.data.objects.new(name, mesh)
-    collection.objects.link(obj)
-    obj.data.materials.append(material)
-    for polygon in obj.data.polygons:
-        polygon.use_smooth = True
-    subdivision = obj.modifiers.new("Tailored cloth surface", "SUBSURF")
-    subdivision.levels = 1
-    subdivision.render_levels = 1
-    solidify = obj.modifiers.new("Tailored cloth thickness", "SOLIDIFY")
-    solidify.thickness = 0.018
-    obj.parent = parent
-    return obj
-
-
-def add_dress_train(
-    collection: bpy.types.Collection,
-    parent: bpy.types.Object,
-    material: bpy.types.Material,
-) -> None:
-    segments_x = 26
-    segments_y = 24
-    vertices: list[tuple[float, float, float]] = []
-    for row in range(segments_y + 1):
-        v = row / segments_y
-        center_y = -4.12 + v * 1.18
-        center_z = 1.29 - v * 0.33 + math.sin(v * math.pi) * 0.045
-        width = 0.32 + v * 0.2
-        for column in range(segments_x + 1):
-            u = column / segments_x * 2 - 1
-            vertices.append(
-                (
-                    0.9 + u * width,
-                    center_y,
-                    center_z - (u * u) * 0.045,
-                )
-            )
-    faces: list[tuple[int, int, int, int]] = []
-    stride = segments_x + 1
-    for row in range(segments_y):
-        for column in range(segments_x):
-            index = row * stride + column
-            faces.append((index, index + 1, index + stride + 1, index + stride))
-    mesh = bpy.data.meshes.new("Moon velvet lap train mesh")
-    mesh.from_pydata(vertices, [], faces)
-    mesh.update()
-    train = bpy.data.objects.new("Moon velvet lap train", mesh)
-    collection.objects.link(train)
-    train.data.materials.append(material)
-    for polygon in train.data.polygons:
-        polygon.use_smooth = True
-    subdivision = train.modifiers.new("Soft fabric folds", "SUBSURF")
-    subdivision.levels = 2
-    subdivision.render_levels = 2
-    solidify = train.modifiers.new("Fabric thickness", "SOLIDIFY")
-    solidify.thickness = 0.035
-    train.parent = parent
-
-    # Front fall hides the mechanical knee/ankle area and reads as a coherent
-    # floor-length gown from every camera angle.
-    add_fabric_shell(
+    # The lounge is the closest object to the camera, so it uses a layered,
+    # high-segment construction instead of a single low-poly block. Individual
+    # cushions, tufting, piping, arms and machined brass legs keep the silhouette
+    # readable even when the camera is placed at seated eye level.
+    add_box(
         collection,
-        "Moon velvet front drape",
-        [
-            (0.98, -2.95, 0.52, 0.13),
-            (0.72, -2.96, 0.5, 0.14),
-            (0.38, -2.98, 0.47, 0.16),
-            (0.12, -3.02, 0.43, 0.18),
-        ],
-        material,
-        parent,
+        "Bench walnut lower frame",
+        (0, -4.38, 0.82),
+        (6.5, 1.28, 0.22),
+        materials["lounge_wood"],
+        0.09,
+        bevel_segments=6,
+        parent=parent,
     )
+    add_box(
+        collection,
+        "Bench velvet upholstered base",
+        (0, -4.32, 1.02),
+        (6.22, 1.16, 0.24),
+        materials["velvet_dark"],
+        0.11,
+        bevel_segments=6,
+        parent=parent,
+    )
+    add_box(
+        collection,
+        "Bench walnut back rail",
+        (0, -5.02, 1.72),
+        (6.55, 0.18, 1.52),
+        materials["lounge_wood"],
+        0.075,
+        bevel_segments=6,
+        rotation=(math.radians(-6), 0, 0),
+        parent=parent,
+    )
+    for x in (-2.7, 2.7):
+        for y in (-4.75, -3.98):
+            add_cylinder(
+                collection,
+                f"Bench machined brass leg {x:+.1f} {y:+.1f}",
+                (x, y, 0.48),
+                0.105,
+                0.68,
+                materials["metal"],
+                vertices=64,
+                bevel=0.025,
+                parent=parent,
+            )
+            add_cylinder(
+                collection,
+                f"Bench brass foot {x:+.1f} {y:+.1f}",
+                (x, y, 0.16),
+                0.18,
+                0.07,
+                materials["metal"],
+                vertices=64,
+                bevel=0.018,
+                parent=parent,
+            )
+
+    for index, x in enumerate((-2.08, 0.0, 2.08)):
+        add_box(
+            collection,
+            f"Velvet seat cushion {index + 1}",
+            (x, -4.21, 1.22),
+            (1.92, 1.03, 0.27),
+            materials["velvet"],
+            0.17,
+            bevel_segments=8,
+            parent=parent,
+        )
+        add_box(
+            collection,
+            f"Velvet tufted back cushion {index + 1}",
+            (x, -4.87, 1.82),
+            (1.92, 0.31, 1.18),
+            materials["velvet"],
+            0.16,
+            bevel_segments=8,
+            rotation=(math.radians(-6), 0, 0),
+            parent=parent,
+        )
+        for button_x in (x - 0.43, x + 0.43):
+            for button_z in (1.6, 1.98):
+                add_uv_sphere(
+                    collection,
+                    f"Velvet tuft button {index + 1}",
+                    (button_x, -4.69, button_z),
+                    (0.052, 0.028, 0.052),
+                    materials["velvet_dark"],
+                    parent,
+                )
+
+    for x in (-3.12, 3.12):
+        add_box(
+            collection,
+            f"Bench rolled arm {x:+.1f}",
+            (x, -4.25, 1.36),
+            (0.34, 1.25, 0.48),
+            materials["velvet_dark"],
+            0.16,
+            bevel_segments=8,
+            parent=parent,
+        )
+        add_box(
+            collection,
+            f"Bench brass arm inlay {x:+.1f}",
+            (x, -3.72, 1.37),
+            (0.37, 0.045, 0.31),
+            materials["metal"],
+            0.022,
+            bevel_segments=5,
+            parent=parent,
+        )
+
+    # A framed woven rug and a small drinks table add believable domestic scale
+    # without competing with the fireworks or the seated companion.
+    add_box(collection, "Woven night carpet", (0, -7.2, 0.2), (5.4, 3.4, 0.07), materials["carpet"], 0.035, bevel_segments=4, parent=parent)
+    for x in (-2.57, 2.57):
+        add_box(collection, f"Carpet woven side border {x:+.1f}", (x, -7.2, 0.245), (0.12, 3.18, 0.018), materials["carpet_trim"], 0.02, bevel_segments=3, parent=parent)
+    for y in (-8.77, -5.63):
+        add_box(collection, f"Carpet woven end border {y:+.1f}", (0, y, 0.245), (5.02, 0.12, 0.018), materials["carpet_trim"], 0.02, bevel_segments=3, parent=parent)
+
+    add_cylinder(collection, "Walnut drinks table top", (-4.15, -4.25, 1.02), 0.72, 0.11, materials["lounge_wood"], vertices=72, bevel=0.045, parent=parent)
+    add_cylinder(collection, "Brass drinks table stem", (-4.15, -4.25, 0.61), 0.075, 0.76, materials["metal"], vertices=48, bevel=0.02, parent=parent)
+    add_cylinder(collection, "Brass drinks table foot", (-4.15, -4.25, 0.24), 0.42, 0.075, materials["metal"], vertices=72, bevel=0.028, parent=parent)
+    for x in (-4.34, -3.96):
+        add_cylinder(collection, f"Two person glass stem {x:+.2f}", (x, -4.25, 1.17), 0.018, 0.22, materials["glass"], vertices=32, bevel=0.006, parent=parent)
+        add_cylinder(collection, f"Two person glass bowl {x:+.2f}", (x, -4.25, 1.31), 0.095, 0.18, materials["glass"], vertices=48, bevel=0.012, parent=parent)
+
+    for x in (-7.8, 7.8):
+        add_cylinder(collection, f"Lantern carved stone plinth {x:+.1f}", (x, 0.75, 0.55), 0.42, 1.0, materials["stone_detail"], vertices=64, bevel=0.065, parent=parent)
+        add_cylinder(collection, f"Lantern warm glass {x:+.1f}", (x, 0.75, 1.28), 0.23, 0.48, materials["lantern"], vertices=48, bevel=0.035, parent=parent)
+        add_cylinder(collection, f"Lantern brass cap {x:+.1f}", (x, 0.75, 1.58), 0.33, 0.13, materials["metal"], vertices=64, bevel=0.028, parent=parent)
 
 
-def add_hair_curve(
-    collection: bpy.types.Collection,
-    name: str,
-    points: list[tuple[float, float, float]],
+def texture_node(
+    nodes: bpy.types.Nodes,
+    path: Path,
+    *,
+    non_color: bool = False,
+) -> bpy.types.Node:
+    node = nodes.new("ShaderNodeTexImage")
+    node.image = bpy.data.images.load(str(path), check_existing=True)
+    if non_color:
+        node.image.colorspace_settings.name = "Non-Color"
+    return node
+
+
+def setup_character_material(
     material: bpy.types.Material,
-    parent: bpy.types.Object,
-    thickness: float,
-) -> bpy.types.Object:
-    curve = bpy.data.curves.new(f"{name} curve", type="CURVE")
-    curve.dimensions = "3D"
-    curve.resolution_u = 3
-    curve.bevel_depth = thickness
-    curve.bevel_resolution = 4
-    spline = curve.splines.new("BEZIER")
-    spline.bezier_points.add(len(points) - 1)
-    for point, coordinate in zip(spline.bezier_points, points):
-        point.co = coordinate
-        point.handle_left_type = "AUTO"
-        point.handle_right_type = "AUTO"
-    obj = bpy.data.objects.new(name, curve)
-    collection.objects.link(obj)
-    curve.materials.append(material)
-    obj.parent = parent
-    bpy.ops.object.select_all(action="DESELECT")
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.convert(target="MESH")
-    return bpy.context.object
+    texture_dir: Path,
+    prefix: str,
+    *,
+    opacity: bool = False,
+) -> None:
+    material.name = f"Companion {prefix.removeprefix('f022_')} PBR"
+    material.use_nodes = True
+    node_tree = material.node_tree
+    if node_tree is None:
+        raise RuntimeError(f"Unable to create material nodes for {material.name}")
+    nodes = node_tree.nodes
+    links = node_tree.links
+    nodes.clear()
+    output = nodes.new("ShaderNodeOutputMaterial")
+    shader = nodes.new("ShaderNodeBsdfPrincipled")
+    set_socket(shader, "Roughness", 0.56)
+    set_socket(shader, "IOR", 1.45)
+    set_socket(shader, "Specular IOR Level", 0.34)
+    links.new(shader.outputs["BSDF"], output.inputs["Surface"])
+
+    color = texture_node(nodes, texture_dir / f"{prefix}_color.tga")
+    links.new(color.outputs["Color"], shader.inputs["Base Color"])
+    if opacity:
+        links.new(color.outputs["Alpha"], shader.inputs["Alpha"])
+        material.surface_render_method = "DITHERED"
+        material.use_backface_culling = False
+        return
+
+    normal = texture_node(nodes, texture_dir / f"{prefix}_normal.tga", non_color=True)
+    normal_map = nodes.new("ShaderNodeNormalMap")
+    normal_map.inputs["Strength"].default_value = 0.72
+    links.new(normal.outputs["Color"], normal_map.inputs["Color"])
+    links.new(normal_map.outputs["Normal"], shader.inputs["Normal"])
+    specular = texture_node(nodes, texture_dir / f"{prefix}_specular.tga", non_color=True)
+    invert = nodes.new("ShaderNodeInvert")
+    links.new(specular.outputs["Color"], invert.inputs["Color"])
+    links.new(invert.outputs["Color"], shader.inputs["Roughness"])
+
+
+def retarget_seated_pose(
+    character: bpy.types.Object,
+    reference: bpy.types.Object,
+    frame: int = 600,
+) -> None:
+    """Retarget a Rocketbox seated rest pose while preserving the character rig."""
+    bpy.context.scene.frame_set(frame)
+    body_bones = [
+        "Bip01 Pelvis",
+        "Bip01 Spine",
+        "Bip01 Spine1",
+        "Bip01 Spine2",
+        "Bip01 Neck",
+        "Bip01 Head",
+        "Bip01 L Clavicle",
+        "Bip01 L UpperArm",
+        "Bip01 L Forearm",
+        "Bip01 L Hand",
+        "Bip01 R Clavicle",
+        "Bip01 R UpperArm",
+        "Bip01 R Forearm",
+        "Bip01 R Hand",
+        "Bip01 L Thigh",
+        "Bip01 L Calf",
+        "Bip01 L Foot",
+        "Bip01 L Toe0",
+        "Bip01 R Thigh",
+        "Bip01 R Calf",
+        "Bip01 R Foot",
+        "Bip01 R Toe0",
+    ]
+    for name in body_bones:
+        target_pose = character.pose.bones[name]
+        target_rest = character.data.bones[name]
+        source_pose = reference.pose.bones[name]
+        target_relative = (
+            target_rest.parent.matrix_local.inverted() @ target_rest.matrix_local
+            if target_rest.parent
+            else target_rest.matrix_local
+        )
+        source_relative = (
+            source_pose.parent.matrix.inverted() @ source_pose.matrix
+            if source_pose.parent
+            else source_pose.matrix
+        )
+        target_pose.rotation_mode = "QUATERNION"
+        target_pose.rotation_quaternion = (
+            target_relative.to_quaternion().inverted()
+            @ source_relative.to_quaternion()
+        )
+
+
+def create_companion_idle(armature: bpy.types.Object) -> None:
+    """Create a compact looping seated idle with a small skyward reaction."""
+    animated_bones = [
+        "Bip01 Pelvis",
+        "Bip01 Spine",
+        "Bip01 Spine1",
+        "Bip01 Spine2",
+        "Bip01 Neck",
+        "Bip01 Head",
+        "Bip01 L Clavicle",
+        "Bip01 L UpperArm",
+        "Bip01 L Forearm",
+        "Bip01 L Hand",
+        "Bip01 R Clavicle",
+        "Bip01 R UpperArm",
+        "Bip01 R Forearm",
+        "Bip01 R Hand",
+        "Bip01 L Thigh",
+        "Bip01 L Calf",
+        "Bip01 L Foot",
+        "Bip01 R Thigh",
+        "Bip01 R Calf",
+        "Bip01 R Foot",
+    ]
+    base = {
+        name: armature.pose.bones[name].rotation_quaternion.copy()
+        for name in animated_bones
+    }
+    armature.animation_data_create()
+    action = bpy.data.actions.new("Companion seated idle and sky reaction")
+    armature.animation_data.action = action
+    scene = bpy.context.scene
+    scene.frame_start = 1
+    scene.frame_end = 240
+    scene.render.fps = 30
+
+    poses = [
+        (1, 0.0, 0.0, 0.0),
+        (48, 0.012, -0.018, 0.0),
+        (96, 0.0, 0.018, 0.0),
+        (138, -0.008, 0.052, 0.026),
+        (186, 0.01, 0.018, 0.012),
+        (240, 0.0, 0.0, 0.0),
+    ]
+    for frame, breath, head_turn, sky_tilt in poses:
+        scene.frame_set(frame)
+        for name in animated_bones:
+            armature.pose.bones[name].rotation_quaternion = base[name].copy()
+        armature.pose.bones["Bip01 Spine2"].rotation_quaternion @= Quaternion((1, 0, 0), breath)
+        armature.pose.bones["Bip01 Neck"].rotation_quaternion @= Quaternion((0, 1, 0), head_turn * 0.42)
+        armature.pose.bones["Bip01 Head"].rotation_quaternion @= (
+            Quaternion((0, 1, 0), head_turn)
+            @ Quaternion((1, 0, 0), sky_tilt)
+        )
+        armature.pose.bones["Bip01 L Clavicle"].rotation_quaternion @= Quaternion((0, 0, 1), breath * 0.22)
+        armature.pose.bones["Bip01 R Clavicle"].rotation_quaternion @= Quaternion((0, 0, -1), breath * 0.22)
+        for name in animated_bones:
+            armature.pose.bones[name].keyframe_insert(
+                data_path="rotation_quaternion",
+                frame=frame,
+                group=name,
+            )
+    scene.frame_set(1)
 
 
 def create_companion(
     collection: bpy.types.Collection,
     parent: bpy.types.Object,
-    materials: dict[str, bpy.types.Material],
-) -> None:
-    """Create a bespoke high-density seated companion for the close foreground."""
-    companion = create_root("Seated stargazer companion", collection)
-    companion.parent = parent
-    skin = materials["skin"]
-    hair = materials["hair"]
-    dress = materials["velvet"]
-    trim = materials["metal"]
-
-    # Tailored torso, waist and skirt use continuous subdivided surfaces instead
-    # of stacked capsules. The fitted silhouette is intentionally stylized rather
-    # than uncanny-realistic, matching the authored medieval city.
-    add_fabric_shell(
-        collection,
-        "Tailored velvet bodice",
-        [
-            (1.2, -4.22, 0.3, 0.23),
-            (1.42, -4.23, 0.28, 0.21),
-            (1.72, -4.23, 0.35, 0.23),
-            (1.9, -4.22, 0.39, 0.24),
-        ],
-        dress,
-        companion,
+    character_path: Path,
+    texture_dir: Path,
+    pose_path: Path,
+) -> tuple[int, int]:
+    """Import and animate a production Rocketbox character for the terrace."""
+    before_character = set(bpy.data.objects)
+    bpy.ops.import_scene.fbx(filepath=str(character_path), use_anim=False)
+    imported_character = [obj for obj in bpy.data.objects if obj not in before_character]
+    armature = next(obj for obj in imported_character if obj.type == "ARMATURE")
+    mesh = max(
+        (obj for obj in imported_character if obj.type == "MESH"),
+        key=lambda obj: len(obj.data.vertices),
     )
-    add_fabric_shell(
-        collection,
-        "Seated velvet skirt",
-        [
-            (1.26, -4.2, 0.32, 0.28),
-            (1.1, -4.18, 0.43, 0.34),
-            (0.94, -4.15, 0.49, 0.39),
-        ],
-        dress,
-        companion,
-    )
-    add_dress_train(collection, companion, dress)
 
-    # Neck, head and a subtly protruding face sit inside a separate soft hair
-    # volume, giving the model a proper profile even though she is mostly viewed
-    # from the neighbouring seat.
-    add_ellipsoid(collection, "Companion neck", (0.9, -4.2, 1.94), (0.095, 0.09, 0.15), skin, companion)
-    add_ellipsoid(collection, "Companion face", (0.9, -4.13, 2.14), (0.22, 0.21, 0.28), skin, companion)
-    add_ellipsoid(collection, "Sculpted hair volume", (0.9, -4.29, 2.18), (0.255, 0.245, 0.305), hair, companion)
-    add_ellipsoid(collection, "Soft face plane", (0.9, -3.985, 2.135), (0.18, 0.06, 0.215), skin, companion)
-    add_ellipsoid(collection, "Small profile nose", (0.9, -3.905, 2.125), (0.038, 0.045, 0.04), skin, companion)
-    add_ellipsoid(collection, "Hair bun", (0.9, -4.52, 2.25), (0.155, 0.13, 0.16), hair, companion)
+    for material in mesh.data.materials:
+        if material.name == "f022_body":
+            setup_character_material(material, texture_dir, "f022_body")
+        elif material.name == "f022_head":
+            setup_character_material(material, texture_dir, "f022_head")
+        elif material.name == "f022_opacity":
+            setup_character_material(material, texture_dir, "f022_opacity", opacity=True)
 
-    # Bent arms terminate in hands resting naturally on the lap.
-    arm_points = [
-        ("L", (0.56, -4.18, 1.82), (0.48, -3.92, 1.5), (0.7, -3.48, 1.17)),
-        ("R", (1.24, -4.18, 1.82), (1.32, -3.92, 1.5), (1.1, -3.48, 1.17)),
-    ]
-    for side, shoulder, elbow, wrist in arm_points:
-        add_ellipsoid(collection, f"{side} soft shoulder", shoulder, (0.16, 0.15, 0.18), dress, companion)
-        add_limb(collection, f"{side} velvet upper arm", shoulder, elbow, 0.13, 0.11, dress, companion)
-        add_limb(collection, f"{side} velvet lower arm", elbow, wrist, 0.105, 0.075, dress, companion)
-        add_ellipsoid(collection, f"{side} hand", wrist, (0.085, 0.12, 0.075), skin, companion)
+    before_pose = set(bpy.data.objects)
+    bpy.ops.import_scene.fbx(filepath=str(pose_path))
+    imported_pose = [obj for obj in bpy.data.objects if obj not in before_pose]
+    pose_armature = next(obj for obj in imported_pose if obj.type == "ARMATURE")
+    retarget_seated_pose(armature, pose_armature)
 
-    # Readable facial features are deliberately restrained at this viewing
-    # distance. Highlights catch moonlight without turning into glowing dots.
-    for x in (0.835, 0.965):
-        add_ellipsoid(collection, f"Eye {x:.2f}", (x, -3.915, 2.17), (0.031, 0.011, 0.022), materials["eye"], companion)
-        add_ellipsoid(collection, f"Eye glint {x:.2f}", (x - 0.006, -3.901, 2.179), (0.008, 0.005, 0.008), materials["eye_glint"], companion)
-    add_ellipsoid(collection, "Rose lips", (0.9, -3.913, 2.065), (0.045, 0.01, 0.014), materials["lips"], companion)
+    # The reference FBX carries a full capture action. It is useful only for
+    # deriving the seated pose and would otherwise be exported beside our
+    # compact idle loop, adding thousands of unused samples to the GLB.
+    for obj in imported_pose:
+        if obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    if armature.animation_data:
+        armature.animation_data_clear()
+    for action in list(bpy.data.actions):
+        bpy.data.actions.remove(action)
+    create_companion_idle(armature)
 
-    # Individual wavy locks provide the close-up detail missing from the old
-    # low-poly sprite-like head. They are converted to real mesh for glTF.
-    for index in range(22):
-        angle = index / 21 * math.pi
-        start_x = 0.9 + math.cos(angle) * 0.225
-        start_z = 2.22 + math.sin(angle) * 0.16
-        side = (index / 21 - 0.5) * 2
-        length = 0.44 + 0.26 * (1 - abs(side))
-        add_hair_curve(
-            collection,
-            f"Wavy hair lock {index:02d}",
-            [
-                (start_x, -4.27, start_z),
-                (start_x + side * 0.035, -4.35, start_z - length * 0.33),
-                (start_x - side * 0.05, -4.34, start_z - length * 0.7),
-                (start_x + side * 0.04, -4.29, start_z - length),
-            ],
-            hair,
-            companion,
-            0.014 + (index % 3) * 0.003,
-        )
-    for index, x in enumerate((0.72, 0.79, 1.01, 1.08)):
-        add_hair_curve(
-            collection,
-            f"Face framing lock {index:02d}",
-            [
-                (x, -4.03, 2.32),
-                (x + (0.9 - x) * 0.18, -3.94, 2.24),
-                (x + (0.9 - x) * 0.08, -3.95, 2.05),
-                (x, -4.02, 1.91),
-            ],
-            hair,
-            companion,
-            0.013,
-        )
+    # She occupies the neighbouring cushion and faces the fireworks. The compact
+    # runtime rig retains authored anatomy, fingers, hair cards and 2K PBR maps,
+    # while the exported loop supplies breathing and a subtle skyward glance.
+    armature.location = (0.9, -4.28, 1.45)
+    armature.rotation_euler[2] = math.pi
+    bpy.context.view_layer.update()
+    armature.name = "Companion rig - Rocketbox 81 bones"
+    mesh.name = "Seated companion - Rocketbox LOD0 skinned"
+    mesh.data.name = "Seated companion skinned mesh"
+    # The facial source ships hundreds of blend targets. No runtime expression
+    # controller uses them in this seated wide shot, while their sparse deltas
+    # and normals add roughly 19 MB. Keep the full LOD0 surface, 2K maps and
+    # 81-bone skin, but strip the dormant morph library from this scene asset.
+    if mesh.data.shape_keys:
+        bpy.ops.object.select_all(action="DESELECT")
+        mesh.select_set(True)
+        bpy.context.view_layer.objects.active = mesh
+        bpy.ops.object.shape_key_remove(all=True, apply_mix=False)
+    for polygon in mesh.data.polygons:
+        polygon.use_smooth = True
+    move_to_collection(armature, collection)
+    move_to_collection(mesh, collection)
+    rig_world = armature.matrix_world.copy()
+    armature.parent = parent
+    armature.matrix_world = rig_world
 
-    # Fine metallic accents catch each firework hue and make the costume feel
-    # designed rather than assembled from generic primitives.
-    bpy.ops.mesh.primitive_torus_add(
-        major_radius=0.3,
-        minor_radius=0.025,
-        major_segments=48,
-        minor_segments=10,
-        location=(0.9, -4.22, 1.39),
-    )
-    belt = bpy.context.object
-    belt.name = "Filigree waist belt"
-    belt.scale.y = 0.78
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    move_to_collection(belt, collection)
-    belt.data.materials.append(trim)
-    belt.parent = companion
-    add_ellipsoid(collection, "Star hair pin", (1.1, -4.08, 2.35), (0.045, 0.02, 0.045), trim, companion)
+    for obj in imported_character:
+        if obj not in (mesh, armature) and obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    mesh.data.calc_loop_triangles()
+    return len(mesh.data.vertices), len(mesh.data.loop_triangles)
 
 
 def add_preview_light(
@@ -922,11 +1024,19 @@ def export_glb(path: Path, root: bpy.types.Object) -> None:
         export_format="GLB",
         use_selection=True,
         export_yup=True,
-        export_apply=True,
-        export_animations=False,
+        export_apply=False,
+        export_animations=True,
+        export_frame_range=True,
+        # Preserve the authored keyframes instead of sampling every transform
+        # on all 81 bones for all 240 frames. The latter adds ~19 MB of static
+        # animation data without changing the motion.
+        export_force_sampling=False,
+        export_skins=True,
         export_materials="EXPORT",
         export_image_format="WEBP",
         export_image_quality=88,
+        export_draco_mesh_compression_enable=True,
+        export_draco_mesh_compression_level=7,
         export_cameras=False,
         export_lights=False,
     )
@@ -936,6 +1046,9 @@ def main() -> None:
     args = parse_args()
     if not args.kit.exists():
         raise FileNotFoundError(args.kit)
+    for path in (args.companion, args.companion_textures, args.companion_pose):
+        if not path.exists():
+            raise FileNotFoundError(path)
     clear_scene()
     scene_collection = bpy.context.scene.collection
     templates = bpy.data.collections.new("SOURCE TEMPLATES - NOT EXPORTED")
@@ -961,25 +1074,41 @@ def main() -> None:
         library.load(module)
     tune_imported_materials(library)
 
+    lounge_glass = make_material(
+        "Smoked crystal glass",
+        (0.42, 0.55, 0.68, 1.0),
+        0.12,
+    )
+    glass_shader = principled(lounge_glass)
+    set_socket(glass_shader, "Transmission Weight", 0.72)
+    set_socket(glass_shader, "IOR", 1.46)
+    lounge_glass.surface_render_method = "DITHERED"
+
     materials = {
         "rock": library.materials.get("MI_UnevenBrick") or make_material("Moon rock", (0.24, 0.32, 0.42, 1), 0.92),
         "wood": library.materials.get("MI_WoodTrim") or make_material("Dark oak", (0.14, 0.07, 0.04, 1), 0.78),
         "grass": make_material("Moonlit garden grass", (0.055, 0.18, 0.13, 1), 0.93),
         "leaf": make_material("Deep emerald foliage", (0.025, 0.15, 0.11, 1), 0.88, sheen=0.08),
         "metal": make_material("Aged romantic brass", (0.22, 0.12, 0.055, 1), 0.34, 0.78),
-        "velvet": make_material("Berry moon velvet", (0.18, 0.018, 0.065, 1), 0.66, sheen=0.42),
+        "lounge_wood": make_material("Hand finished walnut", (0.075, 0.024, 0.011, 1), 0.34, sheen=0.03),
+        "velvet": make_material("Berry moon velvet", (0.15, 0.012, 0.052, 1), 0.72, sheen=0.58),
+        "velvet_dark": make_material("Deep berry velvet piping", (0.045, 0.003, 0.014, 1), 0.76, sheen=0.46),
         "carpet": make_material("Midnight woven carpet", (0.07, 0.035, 0.12, 1), 0.94, sheen=0.2),
+        "carpet_trim": make_material("Woven carpet border", (0.32, 0.13, 0.21, 1), 0.9, sheen=0.16),
+        "stone_detail": make_material("Fine cut blue limestone", (0.15, 0.19, 0.25, 1), 0.82),
+        "glass": lounge_glass,
         "lantern": make_material("Warm lantern glass", (1.0, 0.22, 0.045, 1), 0.26, emission=(1.0, 0.06, 0.01, 1), emission_strength=5.2),
-        "skin": make_material("Warm stylized skin", (0.72, 0.35, 0.24, 1), 0.62, sheen=0.08),
-        "hair": make_material("Midnight auburn hair", (0.055, 0.014, 0.028, 1), 0.42, sheen=0.28),
-        "eye": make_material("Deep violet eyes", (0.018, 0.012, 0.04, 1), 0.3),
-        "eye_glint": make_material("Soft eye glint", (0.68, 0.78, 1.0, 1), 0.2),
-        "lips": make_material("Rose lips", (0.48, 0.045, 0.095, 1), 0.56, sheen=0.18),
     }
 
     create_city(library, hero_collection, root, materials)
     create_terrace(library, hero_collection, root, materials)
-    create_companion(hero_collection, root, materials)
+    companion_vertices, companion_triangles = create_companion(
+        hero_collection,
+        root,
+        args.companion,
+        args.companion_textures,
+        args.companion_pose,
+    )
     tune_imported_materials(library)
 
     companion_preview: Path | None = None
@@ -989,6 +1118,8 @@ def main() -> None:
     export_glb(args.output, root)
     print(f"HERO_ASSET={args.output}")
     print(f"HERO_ASSET_BYTES={args.output.stat().st_size}")
+    print(f"COMPANION_VERTICES={companion_vertices}")
+    print(f"COMPANION_TRIANGLES={companion_triangles}")
     if args.preview:
         print(f"HERO_PREVIEW={args.preview}")
     if companion_preview:
