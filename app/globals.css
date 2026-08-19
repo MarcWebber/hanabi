@@ -784,29 +784,6 @@ canvas:focus-visible {
   transform: translate(-50%, -50%);
 }
 
-.camera-presets {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 5px;
-  margin-bottom: 10px;
-}
-
-.camera-presets button {
-  display: grid;
-  gap: 3px;
-  min-height: 44px;
-  padding: 7px;
-  border: 1px solid var(--line-soft);
-  border-radius: 4px;
-  background: #131720;
-  text-align: left;
-  cursor: pointer;
-}
-
-.camera-presets button:hover { border-color: #4a5565; background: #1b202a; }
-.camera-presets strong { font-size: 9px; font-weight: 600; }
-.camera-presets small { color: var(--quiet); font-family: var(--mono); font-size: 7px; }
-
 .camera-controls,
 .effect-sliders {
   display: grid;
@@ -917,7 +894,6 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.48);
 }
 
-.camera-console.is-exposing .camera-presets,
 .camera-console.is-exposing .camera-controls,
 .camera-console.is-exposing .filter-strip {
   opacity: 0.42;
@@ -1820,7 +1796,6 @@ input:disabled { opacity: 0.38; cursor: not-allowed; }
     width: auto;
   }
 
-  .camera-presets { grid-template-columns: 1fr 1fr; }
   .camera-controls label { grid-template-columns: 92px 50px 1fr; }
   .photo-mode-indicator { top: 60px; left: 8px; }
   .show-now-playing {

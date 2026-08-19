@@ -105,39 +105,6 @@ const APERTURE_OPTIONS = [1.2, 1.4, 1.8, 2, 2.8, 4, 5.6, 8, 11, 16];
 const SHUTTER_OPTIONS = [8, 4, 2, 1, 1 / 2, 1 / 4, 1 / 8, 1 / 15, 1 / 30, 1 / 60, 1 / 125, 1 / 250, 1 / 500, 1 / 1000];
 const ISO_OPTIONS = [100, 200, 320, 400, 800, 1600, 3200, 6400, 12800, 25600];
 
-const CAMERA_PRESETS: Array<{ name: string; note: string; settings: CameraSettings }> = [
-  {
-    name: "长曝光",
-    note: "1 s 光轨",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 11, shutterSeconds: 1, iso: 100, focusDistance: 48, bloom: 0.2, filter: "cinema" },
-  },
-  {
-    name: "夜景",
-    note: "ISO 800",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 4, shutterSeconds: 1 / 60, iso: 800, focusDistance: 48, bloom: 0.28, filter: "neutral" },
-  },
-  {
-    name: "高感",
-    note: "ISO 25600",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 4, shutterSeconds: 1 / 60, iso: 25600, focusDistance: 48, bloom: 0.16, filter: "neutral" },
-  },
-  {
-    name: "浅景深",
-    note: "F1.8",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 35, aperture: 1.8, shutterSeconds: 1 / 125, iso: 400, focusDistance: 26, bloom: 0.4, filter: "cinema" },
-  },
-  {
-    name: "暖色",
-    note: "50 mm",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 50, aperture: 2, shutterSeconds: 1 / 125, iso: 200, focusDistance: 40, bloom: 0.34, filter: "rose" },
-  },
-  {
-    name: "长焦",
-    note: "70 mm",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 70, aperture: 5.6, shutterSeconds: 1 / 60, iso: 1600, focusDistance: 50, bloom: 0.22, filter: "moonlight" },
-  },
-];
-
 const FILTERS: Array<{ id: CameraFilter; name: string }> = [
   { id: "neutral", name: "自然" },
   { id: "cinema", name: "电影" },
@@ -625,11 +592,6 @@ export function FireworkExperience() {
     setCameraSettings((current) => ({ ...current, ...patch }));
   };
 
-  const applyCameraPreset = (settings: CameraSettings, name: string) => {
-    setCameraSettings({ ...settings });
-    announce(`摄影预设：${name}`);
-  };
-
   const playShutterClick = useCallback((closing = false) => {
     const context = shutterAudioRef.current ?? new AudioContext();
     shutterAudioRef.current = context;
@@ -987,18 +949,6 @@ export function FireworkExperience() {
           <output className={Math.abs(exposureStops) > 3 ? "is-clipped" : ""}>
             {formatExposureStops(exposureStops)}
           </output>
-        </div>
-
-        <div className="camera-presets" aria-label="摄像预设">
-          {CAMERA_PRESETS.map((preset) => (
-            <button
-              type="button"
-              key={preset.name}
-              onClick={() => applyCameraPreset(preset.settings, preset.name)}
-            >
-              <strong>{preset.name}</strong><small>{preset.note}</small>
-            </button>
-          ))}
         </div>
 
         <div className="camera-controls">
