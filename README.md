@@ -132,16 +132,6 @@ public/readme/               README 实机画面
 scripts/build_hero_assets.py Blender 英雄场景构建脚本
 ```
 
-## 素材与许可
-
-花火本体仍处于个人作品阶段，尚未声明统一的开源许可证。城堡、人物、音乐、烟花录音与 Draco 解码器分别遵循其原始许可；完整来源和归属记录见：
-
-- [`public/models/THIRD_PARTY_ASSETS.md`](./public/models/THIRD_PARTY_ASSETS.md)
-- [`public/models/licenses/`](./public/models/licenses/)
-- [`public/audio/fireworks/README.md`](./public/audio/fireworks/README.md)
-- [`public/draco/LICENSE`](./public/draco/LICENSE)
-
-如需二次发布，请先逐项确认这些资产的许可要求。
 
 ---
 
