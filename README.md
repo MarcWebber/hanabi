@@ -17,6 +17,7 @@
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-1f6feb?style=for-the-badge&logo=typescript&logoColor=white" />
 </p>
 <p>
+  <img alt="Status" src="https://img.shields.io/badge/status-feature_complete-667085?style=flat-square" />
   <img alt="WebGL" src="https://img.shields.io/badge/WebGL-实时渲染-990000?style=flat-square&logo=webgl&logoColor=white" />
   <img alt="Web Audio" src="https://img.shields.io/badge/Web_Audio-空间声场-6842c2?style=flat-square" />
   <img alt="PBR" src="https://img.shields.io/badge/PBR-月港城堡-cb7b45?style=flat-square" />
@@ -24,9 +25,12 @@
   <img alt="Made for two" src="https://img.shields.io/badge/made_for-two-ff8fbd?style=flat-square" />
 </p>
 
-**[立即进入花火](https://hanabi-sage-beta.vercel.app)** · **[运行项目](#在本地升起第一束花火)** · **[操作方式](#操作方式)** · **[素材与许可](#素材与许可)**
+**[立即进入花火](https://hanabi-sage-beta.vercel.app)** · **[使用指南](./docs/USER_GUIDE.md)** · **[摄影说明](./docs/PHOTOGRAPHY.md)** · **[开发文档](./docs/DEVELOPMENT.md)** · **[文档索引](./docs/README.md)**
 
 </div>
+
+> [!NOTE]
+> **项目状态：体验已完成，暂缓更新。** 仓库继续开放，线上版本继续保留；目前没有新增场景、烟花类型或界面功能的开发计划，只会在必要时处理兼容性、构建与素材归属问题。
 
 ---
 
@@ -47,7 +51,7 @@
 | **十二种烟花图案** | 牡丹、菊型、爱心、土星环、垂柳、星星、螺旋、蝴蝶、棕榈、皇冠、双环与流星。 |
 | **完整烟花设计器** | 自定义文字、960 × 560 手绘画板、颜色、爆炸强度、散开程度、拖尾、升空方式与消散形态。 |
 | **烟花组编排** | 自由选择图案、配色和幕间间隔，排序后播放一整组只属于你的演出。 |
-| **电影摄影模式** | 焦段、光圈、快门、ISO、对焦距离、镜头辉光与四款调色滤镜，支持暂停与 PNG 保存。 |
+| **实时摄影模式** | 焦段、光圈、快门、ISO、对焦距离、镜头辉光与四款调色滤镜，支持多帧曝光、暂停与 PNG 保存。 |
 | **有呼吸的声音** | 多层真实烟花录音、升空与爆炸空间声场、内置肖邦夜曲，也支持上传自己的音乐。 |
 
 ## 创作台
@@ -60,7 +64,9 @@
 
 <img src="./public/readme/hanabi-camera.jpg" alt="花火专业摄影模式，包含焦段、光圈、快门与 ISO 控制" width="100%" />
 
-按下 `⌘ P`，场景就变成一台可以真正调节的夜景相机。长曝光让光轨停留，长焦把烟花拉近，浅景深与电影滤镜则决定这一晚被怎样记住。
+按下 `⌘ P`，场景就变成一台可以调节的夜景相机；再按 `Enter` 或 `S` 释放快门。开帘、曝光、多帧积分、关帘与照片回看会按顺序发生。长曝光让运动中的烟花留下光轨，而城堡仍然保持稳定清晰。
+
+摄影参数的模拟范围、计算方式与边界见 [摄影机制](./docs/PHOTOGRAPHY.md)。
 
 ## 花火的组成
 
@@ -89,8 +95,10 @@ flowchart LR
 | `场景` | 在月港、蔷薇露台、观星台三套实时氛围间切换 |
 | `音乐` | 播放内置夜曲、调整音量或选择本地音乐 |
 | `⌘ P` / `Ctrl P` | 进入或退出专业摄影模式 |
+| `Enter` / `S` | 在摄影模式中释放快门 |
 | `Space` | 在摄影模式中暂停或继续画面 |
 | `R` | 将视线回到双人座位的初始方向 |
+| `Esc` | 关闭照片回看；再次按下则退出摄影模式 |
 
 ## 在本地升起第一束花火
 
@@ -118,20 +126,22 @@ npm run start
 - **React 19 / TypeScript** — 创作台、摄影控制台与应用状态
 - **Unreal Bloom** — 克制的高光与烟花辉光
 - **Web Audio API** — 真实录音分层、空间定位与合成升空声
-- **Blender + Draco** — 英雄场景构建、角色蒙皮与压缩交付
+- **Blender + Draco** — 英雄场景构建、PBR 资产编排与压缩交付
 - **vinext / Vite** — 页面外壳与构建链路
 
 ```text
 app/                         页面入口与全局视觉
+docs/                        使用、摄影与开发说明
 src/fireworks/               烟花体验、场景与类型定义
 src/fireworks/audio/         空间音效与真实录音调度
-src/fireworks/world/         月港世界、光照与角色
+src/fireworks/world/         月港世界、光照与实时氛围
 public/models/               Draco 场景模型与第三方许可
 public/audio/                烟花录音与音乐
 public/readme/               README 实机画面
 scripts/build_hero_assets.py Blender 英雄场景构建脚本
 ```
 
+完整文档入口见 [`docs/README.md`](./docs/README.md)。
 
 ---
 

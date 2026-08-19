@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { EnvironmentPreset } from "../types";
@@ -111,6 +112,7 @@ export class MagicCityWorld {
   private readonly heroContainer = new THREE.Group();
   private readonly loader = new GLTFLoader();
   private readonly dracoLoader = new DRACOLoader();
+  private readonly environmentMap: THREE.Texture;
   private readonly ownedTextures: THREE.Texture[] = [];
   private readonly floatingLanterns: FloatingLantern[] = [];
   private readonly reactiveBursts: ReactiveBurst[] = [];
@@ -135,19 +137,9 @@ export class MagicCityWorld {
     uTime: this.waterUniforms.uTime,
     uPixelRatio: { value: 1 },
   };
-  private readonly hemisphere = new THREE.HemisphereLight(0x99baff, 0x180b18, 1.62);
-  private readonly moonLight = new THREE.DirectionalLight(0xc8dcff, 3.25);
-  private readonly cityGlow = new THREE.PointLight(0xff8c4b, 6.2, 78, 1.55);
-  private readonly companionTurn = new THREE.Quaternion();
-  private readonly companionBreath = new THREE.Quaternion();
-  private readonly companionTurnAxis = new THREE.Vector3(0, 1, 0);
-  private readonly companionBreathAxis = new THREE.Vector3(1, 0, 0);
-  private companionMixer: THREE.AnimationMixer | null = null;
-  private companionAnimationRoot: THREE.Object3D | null = null;
-  private companionHead: THREE.Bone | null = null;
-  private companionSpine: THREE.Bone | null = null;
-  private companionReaction = 0;
-  private companionReactionSide = 0;
+  private readonly hemisphere = new THREE.HemisphereLight(0x99baff, 0x180b18, 0.92);
+  private readonly moonLight = new THREE.DirectionalLight(0xc8dcff, 2.15);
+  private readonly cityGlow = new THREE.PointLight(0xff8c4b, 5.4, 78, 1.55);
   private disposed = false;
   private nextBurstSlot = 0;
 
@@ -156,6 +148,13 @@ export class MagicCityWorld {
     private readonly renderer: THREE.WebGLRenderer,
     private readonly onLoadProgress?: (progress: number) => void,
   ) {
+    const room = new RoomEnvironment();
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.environmentMap = pmrem.fromScene(room, 0.035).texture;
+    room.dispose();
+    pmrem.dispose();
+    this.scene.environment = this.environmentMap;
+    this.scene.environmentIntensity = 0.21;
     this.dracoLoader.setDecoderPath("/draco/");
     this.loader.setDRACOLoader(this.dracoLoader);
     this.root.name = "moonharbor-hero-world";
@@ -205,17 +204,10 @@ export class MagicCityWorld {
     this.burstPositions[slot].copy(position);
     this.burstColors[slot].copy(color);
     this.burstIntensities[slot] = burst.power;
-    this.companionReaction = Math.max(
-      this.companionReaction,
-      THREE.MathUtils.clamp(power, 0.55, 1.8),
-    );
-    this.companionReactionSide = THREE.MathUtils.clamp(position.x / 16, -1, 1);
   }
 
   update(elapsed: number, delta: number) {
     this.waterUniforms.uTime.value = elapsed;
-    this.companionMixer?.update(delta);
-    this.updateCompanion(elapsed, delta);
     this.floatingLanterns.forEach((lantern) => {
       lantern.object.position.y = lantern.baseY + Math.sin(elapsed * lantern.speed + lantern.phase) * 0.24;
       lantern.object.rotation.y += delta * 0.08;
@@ -239,12 +231,12 @@ export class MagicCityWorld {
 
   dispose() {
     this.disposed = true;
-    this.companionMixer?.stopAllAction();
-    if (this.companionAnimationRoot) {
-      this.companionMixer?.uncacheRoot(this.companionAnimationRoot);
-    }
     this.dracoLoader.dispose();
     this.scene.remove(this.root);
+    if (this.scene.environment === this.environmentMap) {
+      this.scene.environment = null;
+    }
+    this.environmentMap.dispose();
     this.ownedTextures.forEach((texture) => texture.dispose());
   }
 
@@ -266,63 +258,43 @@ export class MagicCityWorld {
       this.disposeObject(gltf.scene);
       return;
     }
-    gltf.scene.name = "moonharbor-authored-pbr-city-and-companion";
+    gltf.scene.name = "moonharbor-authored-pbr-city";
     const maxAnisotropy = Math.min(12, this.renderer.capabilities.getMaxAnisotropy());
+    const processedMaterials = new Set<THREE.Material>();
+    const materialTints: Record<string, number> = {
+      MI_Plaster: 0xe0b88d,
+      MI_UnevenBrick: 0x9eaaba,
+      MI_Brick: 0xa8a9b2,
+      MI_RoundTiles: 0xcf6d4e,
+      MI_WoodTrim: 0x8c6049,
+      MI_WoodTrim_Wear: 0xa56e4d,
+      MI_RockTrim: 0x9499a4,
+    };
     gltf.scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      const closeForeground = /companion|bench|velvet|terrace|paver|balustrade|carpet|lantern/i.test(object.name);
-      const architecturalHero = /keep|tower|wing|roof|gate/i.test(object.name);
+      const closeForeground = /bench|velvet|terrace|paver|balustrade|carpet|lantern/i.test(object.name);
+      const architecturalHero = /keep|tower|wing|roof|gate|townhouse|outerwall|balcony|shutter|dormer|wagon|crate/i.test(object.name);
       object.castShadow = closeForeground || architecturalHero;
       object.receiveShadow = true;
       object.frustumCulled = true;
       materialsOf(object).forEach((material) => {
+        if (processedMaterials.has(material)) return;
+        processedMaterials.add(material);
         if (material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshPhysicalMaterial) {
-          material.envMapIntensity = closeForeground ? 0.92 : 0.68;
+          const tint = materialTints[material.name];
+          if (tint !== undefined) material.color.setHex(tint);
+          material.envMapIntensity = closeForeground ? 0.98 : 0.78;
           if (material.map) material.map.anisotropy = maxAnisotropy;
           if (material.normalMap) material.normalMap.anisotropy = maxAnisotropy;
           if (material.roughnessMap) material.roughnessMap.anisotropy = maxAnisotropy;
           if (material.metalnessMap) material.metalnessMap.anisotropy = maxAnisotropy;
+          material.dithering = true;
           material.needsUpdate = true;
         }
       });
     });
-    gltf.scene.traverse((object) => {
-      if (object instanceof THREE.Bone) {
-        if (/Head$/i.test(object.name)) this.companionHead = object;
-        if (/Spine2$/i.test(object.name)) this.companionSpine = object;
-      }
-    });
-    if (gltf.animations.length) {
-      this.companionAnimationRoot = gltf.scene;
-      this.companionMixer = new THREE.AnimationMixer(gltf.scene);
-      const action = this.companionMixer.clipAction(gltf.animations[0]);
-      action.setLoop(THREE.LoopRepeat, Infinity);
-      action.timeScale = 0.82;
-      action.play();
-    }
     this.heroContainer.add(gltf.scene);
     this.onLoadProgress?.(1);
-  }
-
-  private updateCompanion(elapsed: number, delta: number) {
-    const breathe = Math.sin(elapsed * 1.45) * 0.008;
-    const glance = Math.sin(elapsed * 0.19 + 0.8) * 0.025;
-    const reaction = this.companionReaction;
-    if (this.companionSpine) {
-      this.companionBreath.setFromAxisAngle(
-        this.companionBreathAxis,
-        breathe - reaction * 0.012,
-      );
-      this.companionSpine.quaternion.multiply(this.companionBreath);
-    }
-    if (this.companionHead) {
-      this.companionTurn.setFromAxisAngle(
-        this.companionTurnAxis,
-        glance + this.companionReactionSide * reaction * 0.055,
-      );
-      this.companionHead.quaternion.multiply(this.companionTurn);
-    }
-    this.companionReaction = Math.max(0, reaction - delta * 0.62);
   }
 
   private buildAtmosphere() {
@@ -338,6 +310,7 @@ export class MagicCityWorld {
 
   private createLighting() {
     this.moonLight.position.set(-30, 38, 14);
+    this.moonLight.target.position.set(0, 7, -43);
     this.moonLight.castShadow = true;
     this.moonLight.shadow.mapSize.set(2048, 2048);
     this.moonLight.shadow.camera.left = -42;
@@ -348,29 +321,56 @@ export class MagicCityWorld {
     this.moonLight.shadow.camera.far = 150;
     this.moonLight.shadow.bias = -0.00018;
     this.moonLight.shadow.normalBias = 0.035;
+    this.moonLight.shadow.blurSamples = 16;
 
     this.cityGlow.position.set(0, 9, -40);
-    const companionKey = new THREE.SpotLight(0xc7dcff, 10.5, 20, Math.PI / 3.2, 0.72, 1.4);
-    companionKey.position.set(-5.5, 7.5, 0.5);
-    companionKey.target.position.set(0.8, 1.65, 4.15);
-    companionKey.castShadow = true;
-    companionKey.shadow.mapSize.set(1024, 1024);
-    companionKey.shadow.bias = -0.0001;
-    const terraceWarmth = new THREE.PointLight(0xff8b55, 3.8, 14, 1.8);
+    const terraceMoonFill = new THREE.SpotLight(0x9ebeff, 3.6, 28, Math.PI / 2.7, 0.84, 1.35);
+    terraceMoonFill.position.set(-7.5, 9.5, 4.5);
+    terraceMoonFill.target.position.set(0, 0.8, -2.4);
+    terraceMoonFill.castShadow = true;
+    terraceMoonFill.shadow.mapSize.set(1024, 1024);
+    terraceMoonFill.shadow.bias = -0.0001;
+    terraceMoonFill.shadow.blurSamples = 12;
+    const terraceWarmth = new THREE.PointLight(0xff8b55, 2.8, 14, 1.8);
     terraceWarmth.position.set(0, 3.2, 1.1);
-    const castleRim = new THREE.SpotLight(0xff8c55, 8.5, 95, Math.PI / 4, 0.76, 1.45);
+    const castleRim = new THREE.SpotLight(0xff8c55, 5.8, 95, Math.PI / 4, 0.76, 1.45);
     castleRim.position.set(22, 19, -18);
     castleRim.target.position.set(0, 7, -43);
+
+    const facadeLights = [
+      { position: [-22, 8, -20], target: [-12, 7, -43], color: 0xffa56f, intensity: 4.4 },
+      { position: [0, 12, -17], target: [0, 9, -45], color: 0xffc08a, intensity: 6.0 },
+      { position: [22, 8, -20], target: [12, 7, -43], color: 0xff9360, intensity: 4.4 },
+    ].map(({ position, target, color, intensity }, index) => {
+      const light = new THREE.SpotLight(color, intensity, 82, Math.PI / 5.2, 0.78, 1.55);
+      light.name = `facade-light-${index}`;
+      light.position.fromArray(position);
+      light.target.position.fromArray(target);
+      return light;
+    });
+    const coolBackRim = new THREE.SpotLight(0x7fa7ff, 4.6, 78, Math.PI / 4.5, 0.86, 1.4);
+    coolBackRim.position.set(-18, 28, -72);
+    coolBackRim.target.position.set(0, 9, -44);
+    const windowWarmth = [-13, 0, 13].map((x, index) => {
+      const light = new THREE.PointLight(index === 1 ? 0xffc084 : 0xff8f58, index === 1 ? 3.4 : 2.5, 26, 1.9);
+      light.position.set(x, 7 + (index === 1 ? 3 : 0), -42);
+      return light;
+    });
     this.atmosphere.add(
       this.hemisphere,
       this.moonLight,
+      this.moonLight.target,
       this.cityGlow,
-      companionKey,
-      companionKey.target,
+      terraceMoonFill,
+      terraceMoonFill.target,
       terraceWarmth,
       castleRim,
       castleRim.target,
+      coolBackRim,
+      coolBackRim.target,
+      ...windowWarmth,
     );
+    facadeLights.forEach((light) => this.atmosphere.add(light, light.target));
   }
 
   private createSky() {
@@ -580,10 +580,10 @@ export class MagicCityWorld {
     const glowMaterial = new THREE.MeshStandardMaterial({
       color: 0xffb36b,
       emissive: 0xff6b27,
-      emissiveIntensity: 2.8,
+      emissiveIntensity: 1.85,
       roughness: 0.34,
     });
-    for (let index = 0; index < 14; index += 1) {
+    for (let index = 0; index < 8; index += 1) {
       const group = new THREE.Group();
       const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.32, 12), glowMaterial);
       const frame = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.018, 6, 16), frameMaterial);

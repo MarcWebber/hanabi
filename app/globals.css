@@ -633,8 +633,17 @@ canvas:focus-visible {
 }
 
 .photo-mode-indicator > span.is-paused { background: var(--warning); }
+.photo-mode-indicator > span.is-exposing {
+  background: #ff6489;
+  box-shadow: 0 0 0 5px rgba(255, 78, 125, 0.12);
+  animation: exposure-pulse 760ms ease-in-out infinite alternate;
+}
 .photo-mode-indicator strong { font-size: 10px; font-weight: 600; }
 .photo-mode-indicator small { color: var(--muted); font-family: var(--mono); font-size: 9px; }
+
+@keyframes exposure-pulse {
+  to { opacity: 0.42; transform: scale(0.78); }
+}
 
 .camera-console {
   position: absolute;
@@ -682,6 +691,10 @@ canvas:focus-visible {
 }
 
 .camera-console-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.camera-console button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 
 .camera-readout {
   display: grid;
@@ -705,9 +718,75 @@ canvas:focus-visible {
 .camera-readout strong { color: #dbe2ed; font-family: var(--mono); font-size: 12px; font-weight: 500; }
 .camera-readout i { color: var(--muted); font-size: 8px; font-style: normal; }
 
+.exposure-meter {
+  display: grid;
+  grid-template-columns: 42px 1fr 62px;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  margin: -2px 0 10px;
+  padding: 0 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: #0d1118;
+}
+
+.exposure-meter > span,
+.exposure-meter output {
+  color: var(--quiet);
+  font-family: var(--mono);
+  font-size: 8px;
+}
+
+.exposure-meter output { color: #c9d2df; text-align: right; }
+.exposure-meter output.is-clipped { color: #ff8cab; }
+
+.exposure-meter > div {
+  position: relative;
+  height: 12px;
+  background:
+    linear-gradient(90deg, transparent 49.5%, rgba(255, 255, 255, 0.34) 49.5% 50.5%, transparent 50.5%),
+    repeating-linear-gradient(90deg, #3b4350 0 1px, transparent 1px 12.5%);
+}
+
+.exposure-meter > div::before,
+.exposure-meter > div::after {
+  position: absolute;
+  top: -1px;
+  color: #596270;
+  font-family: var(--mono);
+  font-size: 7px;
+}
+
+.exposure-meter > div::before { left: 0; content: "−6"; }
+.exposure-meter > div::after { right: 0; content: "+6"; }
+
+.exposure-meter i {
+  position: absolute;
+  top: 1px;
+  left: var(--meter-position);
+  width: 2px;
+  height: 10px;
+  border-radius: 2px;
+  background: #ff79a9;
+  box-shadow: 0 0 7px rgba(255, 83, 145, 0.72);
+  transform: translateX(-1px);
+}
+
+.exposure-meter b {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #dce3ed;
+  transform: translate(-50%, -50%);
+}
+
 .camera-presets {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 5px;
   margin-bottom: 10px;
 }
@@ -832,6 +911,19 @@ input[type="range"]::-webkit-slider-thumb {
   color: #ffb3d2;
 }
 
+.camera-actions .capture-button:active,
+.camera-console.is-exposing .capture-button {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.48);
+}
+
+.camera-console.is-exposing .camera-presets,
+.camera-console.is-exposing .camera-controls,
+.camera-console.is-exposing .filter-strip {
+  opacity: 0.42;
+  pointer-events: none;
+}
+
 .camera-shortcuts {
   display: flex;
   flex-wrap: wrap;
@@ -849,6 +941,196 @@ input[type="range"]::-webkit-slider-thumb {
   background: #0c0f15;
   color: #aeb8c7;
   font-family: inherit;
+}
+
+.exposure-curtain {
+  position: absolute;
+  z-index: 14;
+  inset: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.exposure-curtain.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.exposure-curtain::before,
+.exposure-curtain::after {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  left: 0;
+  height: 50.5%;
+  background: #020307;
+  content: "";
+}
+
+.exposure-curtain::before { top: 0; transform: translateY(-100%); }
+.exposure-curtain::after { bottom: 0; transform: translateY(100%); }
+
+.exposure-curtain.is-active::before {
+  animation:
+    shutter-open-top 90ms cubic-bezier(.2,.72,.2,1) both,
+    shutter-close-top 90ms var(--shutter-close-delay) cubic-bezier(.72,.05,.88,.35) forwards;
+}
+
+.exposure-curtain.is-active::after {
+  animation:
+    shutter-open-bottom 90ms cubic-bezier(.2,.72,.2,1) both,
+    shutter-close-bottom 90ms var(--shutter-close-delay) cubic-bezier(.72,.05,.88,.35) forwards;
+}
+
+.exposure-shutter-readout {
+  position: absolute;
+  z-index: 2;
+  right: 24px;
+  bottom: 24px;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: end;
+  gap: 2px 10px;
+  min-width: 158px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 5px;
+  background: rgba(5, 8, 14, 0.74);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  font-family: var(--mono);
+  animation: exposure-readout-in 120ms 80ms ease-out both;
+}
+
+.exposure-shutter-readout > span {
+  color: #ff97ba;
+  font-size: 8px;
+  letter-spacing: 0.11em;
+}
+
+.exposure-shutter-readout > span i {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #ff5b85;
+  box-shadow: 0 0 7px rgba(255, 61, 112, 0.8);
+  animation: exposure-pulse 420ms ease-in-out infinite alternate;
+}
+
+.exposure-shutter-readout strong {
+  grid-row: span 2;
+  color: #eef1f6;
+  font-size: 13px;
+  font-weight: 520;
+}
+
+.exposure-shutter-readout small {
+  color: #8e98a7;
+  font-size: 8px;
+}
+
+.exposure-shutter-readout > b {
+  grid-column: 1 / -1;
+  height: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.exposure-shutter-readout > b i {
+  display: block;
+  width: var(--exposure-progress);
+  height: 100%;
+  border-radius: inherit;
+  background: #ff6d9e;
+  transition: width 34ms linear;
+}
+
+@keyframes shutter-open-top { from { transform: translateY(0); } to { transform: translateY(-100%); } }
+@keyframes shutter-open-bottom { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes shutter-close-top { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+@keyframes shutter-close-bottom { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes exposure-readout-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+.photo-review {
+  position: absolute;
+  z-index: 15;
+  inset: 14px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  overflow: hidden;
+  border: 1px solid #303744;
+  border-radius: 8px;
+  background: #05070c;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.72);
+}
+
+.photo-review > img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  background: #02040a;
+}
+
+.photo-review > header {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 5px;
+  background: rgba(7, 10, 16, 0.82);
+  backdrop-filter: blur(14px);
+}
+
+.photo-review > header div { display: grid; gap: 4px; }
+.photo-review > header small { color: #ff8db7; font-family: var(--mono); font-size: 8px; letter-spacing: 0.12em; }
+.photo-review > header strong { color: #e6e9ef; font-family: var(--mono); font-size: 9px; font-weight: 500; }
+.photo-review > header button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #39414e;
+  border-radius: 4px;
+  background: #151a22;
+  color: #aeb7c4;
+  cursor: pointer;
+}
+
+.photo-review > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  padding: 10px 12px;
+  border-top: 1px solid #242a34;
+  background: #0c0f15;
+}
+
+.photo-review > footer button {
+  min-width: 112px;
+  min-height: 34px;
+  border: 1px solid #353d4a;
+  border-radius: 4px;
+  background: #171b23;
+  color: #bdc5d0;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.photo-review > footer .save-capture {
+  border-color: #6a3850;
+  background: #321823;
+  color: #ffc0d9;
 }
 
 /* Right-side editor */

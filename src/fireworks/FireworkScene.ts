@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { AfterimagePass } from "three/examples/jsm/postprocessing/AfterimagePass.js";
 import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
@@ -16,6 +15,7 @@ import {
   resolveTuning,
 } from "./core/FireworkParticles";
 import {
+  calculateExposureStops,
   DEFAULT_CAMERA_SETTINGS,
   type CameraFilter,
   type CameraSettings,
@@ -78,6 +78,19 @@ type CinematicShow = {
   lastProgress: number;
 };
 
+type ExposureCapture = {
+  startedAt: number;
+  physicalDuration: number;
+  interfaceDuration: number;
+  lastProgress: number;
+  accumulator: HTMLCanvasElement;
+  context: CanvasRenderingContext2D;
+  frameCount: number;
+  image: string | null;
+  onProgress: (progress: number) => void;
+  resolve: (image: string) => void;
+};
+
 export type FireworkSceneCallbacks = {
   onReady?: () => void;
   onLoadProgress?: (progress: number) => void;
@@ -113,14 +126,28 @@ const COLOR_GRADE_SHADER = {
     uniform float uGrain;
     uniform float uTime;
     varying vec2 vUv;
+
+    float sensorHash(vec2 value) {
+      return fract(sin(dot(value, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+
     void main() {
       vec3 color = texture2D(tDiffuse, vUv).rgb;
       float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
       color = mix(vec3(luminance), color, uSaturation);
       color = (color - 0.5) * uContrast + 0.5;
       color = max(vec3(0.0), color * uTint + uLift);
-      float grain = fract(sin(dot(vUv * vec2(173.3, 91.7) + uTime, vec2(12.9898, 78.233))) * 43758.5453);
-      color += (grain - 0.5) * uGrain * (0.42 + luminance * 0.58);
+      vec2 sensorPixel = floor(gl_FragCoord.xy);
+      float timeStep = floor(uTime);
+      float luminanceNoise = sensorHash(sensorPixel + vec2(timeStep, -timeStep));
+      vec3 chromaNoise = vec3(
+        sensorHash(sensorPixel * 0.73 + timeStep * 1.17),
+        sensorHash(sensorPixel * 0.81 - timeStep * 0.83),
+        sensorHash(sensorPixel * 0.67 + timeStep * 1.43)
+      ) - 0.5;
+      float shadowResponse = mix(1.0, 0.34, smoothstep(0.035, 0.82, luminance));
+      color += (luminanceNoise - 0.5) * uGrain * shadowResponse;
+      color += chromaNoise * uGrain * 0.14 * shadowResponse;
       vec2 centered = vUv - 0.5;
       float vignette = smoothstep(0.78, 0.18, dot(centered, centered));
       color *= mix(1.0 - uVignette, 1.0, vignette);
@@ -147,7 +174,6 @@ export class FireworkScene {
   private readonly camera = new THREE.PerspectiveCamera(46.4, 1, 0.08, 320);
   private readonly renderer: THREE.WebGLRenderer;
   private readonly composer: EffectComposer;
-  private readonly afterimagePass: AfterimagePass;
   private readonly bloomPass: UnrealBloomPass;
   private readonly bokehPass: BokehPass;
   private readonly gradePass: ShaderPass;
@@ -173,6 +199,7 @@ export class FireworkScene {
   private cameraSettings: CameraSettings = { ...DEFAULT_CAMERA_SETTINGS };
   private cameraMotion: CameraMotion | null = null;
   private cinematicShow: CinematicShow | null = null;
+  private exposureCapture: ExposureCapture | null = null;
 
   constructor(
     private readonly container: HTMLDivElement,
@@ -188,7 +215,7 @@ export class FireworkScene {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.86;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.VSMShadowMap;
     this.renderer.setClearColor(0x030510, 1);
     this.renderer.domElement.setAttribute("role", "img");
     this.renderer.domElement.setAttribute("aria-label", "坐在城堡露台仰望的可交互 3D 烟花夜景，拖动可转动视线");
@@ -210,19 +237,16 @@ export class FireworkScene {
     const renderPass = new RenderPass(this.scene, this.camera);
     this.bokehPass = new BokehPass(this.scene, this.camera, {
       focus: DEFAULT_CAMERA_SETTINGS.focusDistance,
-      aperture: 0.000014,
-      maxblur: 0.002,
+      aperture: 0.00001,
+      maxblur: 0.0015,
     });
     this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.28, 0.52);
     this.gradePass = new ShaderPass(COLOR_GRADE_SHADER);
-    this.afterimagePass = new AfterimagePass(0.78);
-    this.afterimagePass.enabled = false;
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(renderPass);
     this.composer.addPass(this.bokehPass);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(this.gradePass);
-    this.composer.addPass(this.afterimagePass);
     this.composer.addPass(new OutputPass());
 
     this.setCameraSettings(DEFAULT_CAMERA_SETTINGS);
@@ -267,23 +291,30 @@ export class FireworkScene {
     );
     this.camera.updateProjectionMatrix();
 
-    const shutterStops = Math.log2(settings.shutterSeconds / (1 / 60));
-    const isoStops = Math.log2(settings.iso / 320);
-    const apertureStops = Math.log2(Math.pow(2.8 / settings.aperture, 2));
-    const exposureStops = (shutterStops + isoStops + apertureStops) * 0.18;
-    this.renderer.toneMappingExposure = THREE.MathUtils.clamp(0.86 * Math.pow(2, exposureStops), 0.48, 1.14);
-    this.bloomPass.threshold = THREE.MathUtils.lerp(0.68, 0.4, settings.bloom);
+    const exposureStops = calculateExposureStops(settings);
+    const exposureGain = Math.pow(2, exposureStops);
+    this.renderer.toneMappingExposure = THREE.MathUtils.clamp(0.44 * exposureGain, 0.025, 34);
+    const overexposure = THREE.MathUtils.clamp(exposureStops / 7, 0, 1);
+    this.bloomPass.threshold = THREE.MathUtils.lerp(0.68, 0.4, settings.bloom) - overexposure * 0.12;
     this.bloomPass.strength = THREE.MathUtils.lerp(0.12, 0.62, settings.bloom);
     this.bloomPass.radius = THREE.MathUtils.lerp(0.15, 0.38, settings.bloom);
     const bokehUniforms = this.bokehPass.uniforms as Record<string, { value: number }>;
-    bokehUniforms.focus.value = settings.focusDistance;
-    bokehUniforms.aperture.value = 0.000012 * Math.pow(2.8 / settings.aperture, 1.35);
-    bokehUniforms.maxblur.value = THREE.MathUtils.lerp(
-      0.0004,
-      0.0034,
-      THREE.MathUtils.clamp((16 - settings.aperture) / 14.6, 0, 1),
+    const focalLengthMeters = settings.focalLength / 1000;
+    const focusDistance = Math.max(settings.focusDistance, focalLengthMeters + 0.01);
+    const sensorWidthMeters = 0.036;
+    const physicalDefocus = (
+      focalLengthMeters * focalLengthMeters
+      / (settings.aperture * focusDistance * (focusDistance - focalLengthMeters) * sensorWidthMeters)
     );
-    this.bokehPass.enabled = settings.aperture < 13;
+    const apertureScale = Math.pow(2.8 / settings.aperture, 0.32);
+    bokehUniforms.focus.value = settings.focusDistance;
+    bokehUniforms.aperture.value = THREE.MathUtils.clamp(physicalDefocus * 5.2, 0.000002, 0.0045);
+    bokehUniforms.maxblur.value = THREE.MathUtils.clamp(
+      0.001 + 0.0065 * Math.pow(settings.focalLength / 50, 1.15) * apertureScale,
+      0.001,
+      0.012,
+    );
+    this.bokehPass.enabled = true;
 
     const grade = FILTER_GRADES[settings.filter];
     this.gradePass.uniforms.uTint.value.set(...grade.tint);
@@ -291,21 +322,10 @@ export class FireworkScene {
     this.gradePass.uniforms.uContrast.value = grade.contrast;
     this.gradePass.uniforms.uVignette.value = grade.vignette;
     this.gradePass.uniforms.uLift.value = grade.lift;
-    this.gradePass.uniforms.uGrain.value = THREE.MathUtils.lerp(
-      0.003,
-      0.052,
-      THREE.MathUtils.clamp((settings.iso - 100) / 1500, 0, 1),
-    );
+    const sensorNoise = THREE.MathUtils.clamp(Math.log2(settings.iso / 100) / 8, 0, 1);
+    this.gradePass.uniforms.uGrain.value = THREE.MathUtils.lerp(0.002, 0.07, Math.pow(sensorNoise, 1.5));
 
-    const exposureFrames = settings.shutterSeconds * 60;
-    this.afterimagePass.enabled = exposureFrames > 1.35;
-    this.afterimagePass.damp = THREE.MathUtils.clamp(
-      1 - 1 / Math.max(1, exposureFrames),
-      0.48,
-      0.986,
-    );
-
-    const particleIntensity = THREE.MathUtils.clamp(0.54 + settings.bloom * 0.18 + exposureStops * 0.035, 0.46, 0.76);
+    const particleIntensity = this.currentParticleIntensity();
     this.rockets.forEach((rocket) => rocket.trail.setIntensity(particleIntensity * 0.9));
     this.bursts.forEach((burst) => burst.clouds.forEach((cloud) => cloud.setIntensity(particleIntensity)));
   }
@@ -319,9 +339,38 @@ export class FireworkScene {
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }
 
-  captureFrame() {
-    this.composer.render();
-    return this.renderer.domElement.toDataURL("image/png");
+  captureExposure(onProgress: (progress: number) => void) {
+    if (this.exposureCapture) {
+      return Promise.reject(new Error("An exposure is already in progress"));
+    }
+    const physicalDuration = THREE.MathUtils.clamp(this.cameraSettings.shutterSeconds, 1 / 1000, 8);
+    const interfaceDuration = Math.max(physicalDuration, 0.09) + 0.09;
+    const source = this.renderer.domElement;
+    const captureScale = Math.min(1, 1920 / source.width);
+    const accumulator = document.createElement("canvas");
+    accumulator.width = Math.max(1, Math.round(source.width * captureScale));
+    accumulator.height = Math.max(1, Math.round(source.height * captureScale));
+    const context = accumulator.getContext("2d", { alpha: false });
+    if (!context) return Promise.reject(new Error("Unable to create the exposure accumulator"));
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    this.cameraMotion = null;
+    this.lookPointer = null;
+    return new Promise<string>((resolve) => {
+      this.exposureCapture = {
+        startedAt: performance.now() / 1000,
+        physicalDuration,
+        interfaceDuration,
+        lastProgress: -1,
+        accumulator,
+        context,
+        frameCount: 0,
+        image: null,
+        onProgress,
+        resolve,
+      };
+      onProgress(0);
+    });
   }
 
   setSoundEnabled(enabled: boolean) {
@@ -483,6 +532,10 @@ export class FireworkScene {
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.frameHandle);
+    if (this.exposureCapture) {
+      this.exposureCapture.resolve(this.exposureCapture.image ?? "");
+      this.exposureCapture = null;
+    }
     this.resizeObserver.disconnect();
     this.renderer.domElement.removeEventListener("pointerdown", this.handleLookStart);
     this.renderer.domElement.removeEventListener("pointermove", this.handleLookMove);
@@ -525,7 +578,7 @@ export class FireworkScene {
     mesh.position.copy(start);
     const trail = new RocketTrail(start, color, tuning.launchStyle, tuning.trail);
     trail.setPixelRatio(this.pixelRatio);
-    trail.setIntensity(0.53 + this.cameraSettings.bloom * 0.16);
+    trail.setIntensity(this.currentParticleIntensity() * 0.9);
     this.scene.add(mesh, trail.points);
     this.rockets.push({
       mesh,
@@ -545,7 +598,7 @@ export class FireworkScene {
     this.world.pulseFirework(rocket.target, rocket.color, rocket.tuning.power);
     this.callbacks.onImpact?.(rocket.tuning.power);
     const clouds = makeBurstClouds(rocket.target, rocket.options, this.pixelRatio);
-    const particleIntensity = 0.53 + this.cameraSettings.bloom * 0.18;
+    const particleIntensity = this.currentParticleIntensity();
     clouds.forEach((cloud) => {
       cloud.setIntensity(particleIntensity);
       this.scene.add(cloud.points);
@@ -658,20 +711,61 @@ export class FireworkScene {
     const delta = Math.min(this.clock.getDelta(), 0.034);
     if (!this.paused) {
       this.visualTime += delta;
-      this.updateCameraMotion();
+      if (!this.exposureCapture) this.updateCameraMotion();
       this.updateCinematicShow();
       this.updateRockets(delta);
       this.updateBursts(delta);
       this.world.update(this.visualTime, delta);
       this.runAutoplay();
     }
-    this.gradePass.uniforms.uTime.value = this.visualTime * 47.13;
+    this.gradePass.uniforms.uTime.value = performance.now() * 0.04713;
     this.audio.updateListener(this.camera);
     this.composer.render();
+    this.updateExposureCapture(performance.now() / 1000);
     this.frameHandle = requestAnimationFrame(this.animate);
   };
 
+  private currentParticleIntensity() {
+    const gain = Math.pow(2, calculateExposureStops(this.cameraSettings));
+    return THREE.MathUtils.clamp(
+      (0.5 + this.cameraSettings.bloom * 0.2) * Math.pow(gain, 0.3),
+      0.18,
+      2.1,
+    );
+  }
+
+  private updateExposureCapture(now: number) {
+    const capture = this.exposureCapture;
+    if (!capture) return;
+    const elapsed = now - capture.startedAt;
+    const progress = THREE.MathUtils.clamp(elapsed / capture.interfaceDuration, 0, 1);
+    if (progress - capture.lastProgress >= 0.01 || progress === 1) {
+      capture.lastProgress = progress;
+      capture.onProgress(progress);
+    }
+    if (elapsed < capture.physicalDuration || capture.frameCount === 0) {
+      capture.frameCount += 1;
+      capture.context.globalCompositeOperation = capture.frameCount === 1 ? "copy" : "source-over";
+      capture.context.globalAlpha = capture.frameCount === 1 ? 1 : 1 / capture.frameCount;
+      capture.context.drawImage(
+        this.renderer.domElement,
+        0,
+        0,
+        capture.accumulator.width,
+        capture.accumulator.height,
+      );
+      capture.context.globalAlpha = 1;
+    }
+    if (!capture.image && elapsed >= capture.physicalDuration && capture.frameCount > 0) {
+      capture.image = capture.accumulator.toDataURL("image/png");
+    }
+    if (elapsed < capture.interfaceDuration || !capture.image) return;
+    this.exposureCapture = null;
+    capture.resolve(capture.image);
+  }
+
   private moveCamera(yaw: number, pitch: number, duration: number) {
+    if (this.exposureCapture) return;
     this.cameraMotion = {
       startedAt: this.visualTime,
       duration: Math.max(0.05, duration),
@@ -788,14 +882,14 @@ export class FireworkScene {
   }
 
   private handleLookStart = (event: PointerEvent) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || this.exposureCapture) return;
     this.cameraMotion = null;
     this.lookPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
     this.renderer.domElement.setPointerCapture(event.pointerId);
   };
 
   private handleLookMove = (event: PointerEvent) => {
-    if (!this.lookPointer || this.lookPointer.id !== event.pointerId) return;
+    if (this.exposureCapture || !this.lookPointer || this.lookPointer.id !== event.pointerId) return;
     const deltaX = event.clientX - this.lookPointer.x;
     const deltaY = event.clientY - this.lookPointer.y;
     this.lookPointer.x = event.clientX;

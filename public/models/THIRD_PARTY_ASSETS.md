@@ -13,19 +13,6 @@
   material tints, shared-material deduplication, WebP texture encoding and scene
   scale/layout changes.
 
-## Microsoft Rocketbox — Female Party 02
-
-- Creator: Microsoft / Rocketbox Studios
-- Source: https://github.com/microsoft/Microsoft-Rocketbox
-- License: MIT; see `licenses/MICROSOFT_ROCKETBOX_LICENSE.md`
-- Used for: the seated companion's LOD0 body mesh, face, hands, hair cards,
-  81-bone source rig and 2048px color/normal/specular textures.
-- Changes: retargeted from the official seated breathing pose, given a compact
-  looping idle/reaction animation, placed on the terrace and encoded into the
-  final GLB with WebP textures. The runtime keeps the character skeleton for
-  breathing, head movement and firework reactions. Dormant facial morph targets
-  are omitted from this wide-shot scene; geometry is Draco-compressed at export.
-
 ## 25 CC0 bang / firework SFX
 
 - Creator: rubberduck

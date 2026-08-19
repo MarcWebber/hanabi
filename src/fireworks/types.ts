@@ -65,10 +65,21 @@ export const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
   aperture: 4,
   shutterSeconds: 1 / 60,
   iso: 320,
-  focusDistance: 24,
+  focusDistance: 48,
   bloom: 0.24,
   filter: "cinema",
 };
+
+const REFERENCE_APERTURE = 4;
+const REFERENCE_SHUTTER_SECONDS = 1 / 60;
+const REFERENCE_ISO = 320;
+
+export function calculateExposureStops(settings: CameraSettings) {
+  const shutterStops = Math.log2(settings.shutterSeconds / REFERENCE_SHUTTER_SECONDS);
+  const isoStops = Math.log2(settings.iso / REFERENCE_ISO);
+  const apertureStops = 2 * Math.log2(REFERENCE_APERTURE / settings.aperture);
+  return shutterStops + isoStops + apertureStops;
+}
 
 export type PatternPoint = {
   x: number;

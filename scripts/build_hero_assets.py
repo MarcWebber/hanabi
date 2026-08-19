@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Iterable
 
 import bpy
-from mathutils import Euler, Matrix, Quaternion, Vector
+from mathutils import Euler, Matrix, Vector
 
 
 WALL_HEIGHT = 3.123
@@ -29,30 +29,10 @@ MODULE_WIDTH = 2.0
 KIT_DEFAULT = Path(
     "/private/tmp/medieval-megakit/Medieval Village MegaKit[Standard]/glTF"
 )
-ROCKETBOX_DEFAULT = Path(
-    "/private/tmp/microsoft-rocketbox/Assets/Avatars/Adults/Female_Party_02"
-)
-ROCKETBOX_POSE_DEFAULT = Path(
-    "/private/tmp/microsoft-rocketbox/Assets/Animations/"
-    "all_animations_max_motextr_static/f_sit_chair_breathe_01.max.fbx"
-)
-
-
 def parse_args() -> argparse.Namespace:
     extra = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     parser = argparse.ArgumentParser()
     parser.add_argument("--kit", type=Path, default=KIT_DEFAULT)
-    parser.add_argument(
-        "--companion",
-        type=Path,
-        default=ROCKETBOX_DEFAULT / "Export/Female_Party_02_facial.fbx",
-    )
-    parser.add_argument(
-        "--companion-textures",
-        type=Path,
-        default=ROCKETBOX_DEFAULT / "Textures",
-    )
-    parser.add_argument("--companion-pose", type=Path, default=ROCKETBOX_POSE_DEFAULT)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--preview", type=Path)
     return parser.parse_args(extra)
@@ -349,6 +329,13 @@ def building(
                 label=f"{label}_front",
                 parent=parent,
             )
+            if floor > 0 and (index + floor) % 2 == 0:
+                library.instance(
+                    "WindowShutters_Wide_Round_Open",
+                    (px, y - depth / 2 - 0.035, z),
+                    label=f"{label}_front_shutters",
+                    parent=parent,
+                )
             library.instance(
                 base_wall if floor == 0 else wall,
                 (px, y + depth / 2, z),
@@ -356,6 +343,14 @@ def building(
                 label=f"{label}_rear",
                 parent=parent,
             )
+            if floor > 0 and (index + floor) % 2 == 1:
+                library.instance(
+                    "WindowShutters_Wide_Round_Open",
+                    (px, y + depth / 2 + 0.035, z),
+                    rotation=(0, 0, math.pi),
+                    label=f"{label}_rear_shutters",
+                    parent=parent,
+                )
         for index in range(depth_modules):
             py = y - depth / 2 + MODULE_WIDTH / 2 + index * MODULE_WIDTH
             side_module = base_wall if floor == 0 else wall
@@ -441,27 +436,57 @@ def create_trees(
     collection: bpy.types.Collection,
     parent: bpy.types.Object,
     trunk: bpy.types.Material,
-    leaf: bpy.types.Material,
+    leaves: tuple[bpy.types.Material, ...],
 ) -> None:
     positions = [
         (-19, 34, 0.8, 1.2), (-17, 47, 0.8, 1.0), (-13, 55, 0.8, 1.25),
         (14, 54, 0.8, 1.1), (19, 45, 0.8, 1.3), (18, 35, 0.8, 1.05),
-        (-8, 31, 0.8, 0.95), (9, 32, 0.8, 1.0),
     ]
+    crown_offsets = (
+        (-0.86, -0.08, 3.12, 0.72),
+        (-0.46, 0.18, 3.48, 0.78),
+        (0.02, -0.16, 3.18, 0.82),
+        (0.52, 0.12, 3.45, 0.76),
+        (0.88, -0.02, 3.08, 0.66),
+        (-0.66, -0.06, 3.94, 0.68),
+        (-0.18, 0.2, 4.05, 0.77),
+        (0.38, -0.12, 4.03, 0.73),
+        (0.7, 0.16, 3.82, 0.62),
+        (-0.34, -0.04, 4.58, 0.61),
+        (0.2, 0.12, 4.62, 0.67),
+    )
     for index, (x, y, z, scale) in enumerate(positions):
-        bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.22 * scale, depth=2.8 * scale, location=(x, y, z + 1.4 * scale))
-        tree_trunk = bpy.context.object
-        tree_trunk.name = f"Carved tree trunk {index:02d}"
-        move_to_collection(tree_trunk, collection)
-        tree_trunk.data.materials.append(trunk)
-        tree_trunk.parent = parent
-        for crown_index, offset in enumerate(((-0.45, 0.0, 3.0), (0.36, 0.05, 3.2), (0.0, 0.15, 3.7))):
+        add_cylinder(
+            collection,
+            f"Carved tree trunk {index:02d}",
+            (x, y, z + 1.5 * scale),
+            0.2 * scale,
+            3.0 * scale,
+            trunk,
+            vertices=28,
+            bevel=0.035,
+            parent=parent,
+        )
+        for branch_index, (dx, dy, dz, rx, ry) in enumerate(((-0.44, 0.0, 2.65, 0.0, -0.72), (0.38, 0.12, 2.95, 0.18, 0.68), (-0.1, -0.35, 3.25, -0.65, 0.18))):
+            add_cylinder(
+                collection,
+                f"Tree branch {index:02d}-{branch_index}",
+                (x + dx * scale * 0.42, y + dy * scale * 0.42, z + dz * scale),
+                0.075 * scale,
+                1.15 * scale,
+                trunk,
+                vertices=20,
+                bevel=0.018,
+                rotation=(rx, ry, 0),
+                parent=parent,
+            )
+        for crown_index, (dx, dy, dz, crown_scale) in enumerate(crown_offsets):
             add_uv_sphere(
                 collection,
                 f"Dense tree crown {index:02d}-{crown_index}",
-                (x + offset[0] * scale, y + offset[1] * scale, z + offset[2] * scale),
-                (1.25 * scale, 1.0 * scale, 1.35 * scale),
-                leaf,
+                (x + dx * scale, y + dy * scale, z + dz * scale),
+                (0.82 * crown_scale * scale, 0.68 * crown_scale * scale, 0.88 * crown_scale * scale),
+                leaves[(index + crown_index) % len(leaves)],
                 parent,
             )
 
@@ -482,6 +507,39 @@ def create_city(
     building(library, parent, "EastTower", 9, 42.5, 2, 2, 4, "Roof_Tower_RoundTiles")
     building(library, parent, "WestWing", -14, 47, 3, 4, 3, "Roof_RoundTiles_6x8")
     building(library, parent, "EastWing", 14, 47, 3, 4, 3, "Roof_RoundTiles_6x8")
+
+    # The keep is the visual anchor from the seated camera. Layer authored
+    # shutters, balconies, roof furniture and supports over the modular shell
+    # so its facade holds up when the player zooms in for a photograph.
+    for x in (-2.0, 0.0, 2.0):
+        library.instance(
+            "Balcony_Cross_Straight",
+            (x, 37.82, WALL_HEIGHT * 2),
+            label="GrandKeepGallery",
+            parent=parent,
+        )
+    for x in (-2.05, 1.95):
+        library.instance(
+            "Roof_Dormer_RoundTile",
+            (x, 39.1, WALL_HEIGHT * 4 + 1.82),
+            label="GrandKeepDormer",
+            parent=parent,
+        )
+    for x, y, floor in ((-14, 42.85, 3), (14, 42.85, 3)):
+        library.instance(
+            "Roof_Dormer_RoundTile",
+            (x - 0.95, y, WALL_HEIGHT * floor + 1.35),
+            scale=(0.82, 0.82, 0.82),
+            label="WingDormer",
+            parent=parent,
+        )
+    library.instance(
+        "Roof_FrontSupports",
+        (0, 37.9, WALL_HEIGHT * 4 - 0.1),
+        scale=(0.92, 0.92, 0.92),
+        label="GrandKeepEaves",
+        parent=parent,
+    )
 
     houses = [
         (-15.5, 35.2, 2, 3, 2, "Roof_RoundTiles_4x6"),
@@ -508,6 +566,9 @@ def create_city(
         library.instance("Wall_UnevenBrick_Straight", (x, 29.2, 0.1), label="OuterWall", parent=parent)
     library.instance("Wall_Arch", (0, 29.15, 0.0), scale=(2.15, 1.0, 1.65), label="MoonGate", parent=parent)
     library.instance("Door_8_Round", (-0.02, 29.0, 0.15), scale=(0.9, 0.9, 1.45), label="MoonGateDoor", parent=parent)
+    library.instance("Prop_Wagon", (-7.2, 31.25, 0.2), rotation=(0, 0, -0.26), scale=(0.78, 0.78, 0.78), label="MarketWagon", parent=parent)
+    for index, (x, y, rotation) in enumerate(((-5.7, 31.0, 0.18), (-8.6, 31.55, -0.12), (6.9, 31.2, 0.28))):
+        library.instance("Prop_Crate", (x, y, 0.2), rotation=(0, 0, rotation), scale=(0.72, 0.72, 0.72), label=f"MarketCrate{index:02d}", parent=parent)
 
     for x in (-22.5, 22.5):
         building(library, parent, f"WallTower{x:+.0f}", x, 30.3, 2, 2, 3, "Roof_Tower_RoundTiles")
@@ -520,7 +581,12 @@ def create_city(
     ]:
         library.instance(name, (x, y, z), rotation=(math.pi / 2, 0, rz), scale=(scale, scale, scale), label="Ivy", parent=parent)
 
-    create_trees(collection, parent, materials["wood"], materials["leaf"])
+    create_trees(
+        collection,
+        parent,
+        materials["wood"],
+        (materials["leaf"], materials["leaf_light"], materials["leaf_deep"]),
+    )
 
 
 def create_terrace(
@@ -667,7 +733,7 @@ def create_terrace(
         )
 
     # A framed woven rug and a small drinks table add believable domestic scale
-    # without competing with the fireworks or the seated companion.
+    # while keeping the empty terrace calm and inviting.
     add_box(collection, "Woven night carpet", (0, -7.2, 0.2), (5.4, 3.4, 0.07), materials["carpet"], 0.035, bevel_segments=4, parent=parent)
     for x in (-2.57, 2.57):
         add_box(collection, f"Carpet woven side border {x:+.1f}", (x, -7.2, 0.245), (0.12, 3.18, 0.018), materials["carpet_trim"], 0.02, bevel_segments=3, parent=parent)
@@ -685,254 +751,6 @@ def create_terrace(
         add_cylinder(collection, f"Lantern carved stone plinth {x:+.1f}", (x, 0.75, 0.55), 0.42, 1.0, materials["stone_detail"], vertices=64, bevel=0.065, parent=parent)
         add_cylinder(collection, f"Lantern warm glass {x:+.1f}", (x, 0.75, 1.28), 0.23, 0.48, materials["lantern"], vertices=48, bevel=0.035, parent=parent)
         add_cylinder(collection, f"Lantern brass cap {x:+.1f}", (x, 0.75, 1.58), 0.33, 0.13, materials["metal"], vertices=64, bevel=0.028, parent=parent)
-
-
-def texture_node(
-    nodes: bpy.types.Nodes,
-    path: Path,
-    *,
-    non_color: bool = False,
-) -> bpy.types.Node:
-    node = nodes.new("ShaderNodeTexImage")
-    node.image = bpy.data.images.load(str(path), check_existing=True)
-    if non_color:
-        node.image.colorspace_settings.name = "Non-Color"
-    return node
-
-
-def setup_character_material(
-    material: bpy.types.Material,
-    texture_dir: Path,
-    prefix: str,
-    *,
-    opacity: bool = False,
-) -> None:
-    material.name = f"Companion {prefix.removeprefix('f022_')} PBR"
-    material.use_nodes = True
-    node_tree = material.node_tree
-    if node_tree is None:
-        raise RuntimeError(f"Unable to create material nodes for {material.name}")
-    nodes = node_tree.nodes
-    links = node_tree.links
-    nodes.clear()
-    output = nodes.new("ShaderNodeOutputMaterial")
-    shader = nodes.new("ShaderNodeBsdfPrincipled")
-    set_socket(shader, "Roughness", 0.56)
-    set_socket(shader, "IOR", 1.45)
-    set_socket(shader, "Specular IOR Level", 0.34)
-    links.new(shader.outputs["BSDF"], output.inputs["Surface"])
-
-    color = texture_node(nodes, texture_dir / f"{prefix}_color.tga")
-    links.new(color.outputs["Color"], shader.inputs["Base Color"])
-    if opacity:
-        links.new(color.outputs["Alpha"], shader.inputs["Alpha"])
-        material.surface_render_method = "DITHERED"
-        material.use_backface_culling = False
-        return
-
-    normal = texture_node(nodes, texture_dir / f"{prefix}_normal.tga", non_color=True)
-    normal_map = nodes.new("ShaderNodeNormalMap")
-    normal_map.inputs["Strength"].default_value = 0.72
-    links.new(normal.outputs["Color"], normal_map.inputs["Color"])
-    links.new(normal_map.outputs["Normal"], shader.inputs["Normal"])
-    specular = texture_node(nodes, texture_dir / f"{prefix}_specular.tga", non_color=True)
-    invert = nodes.new("ShaderNodeInvert")
-    links.new(specular.outputs["Color"], invert.inputs["Color"])
-    links.new(invert.outputs["Color"], shader.inputs["Roughness"])
-
-
-def retarget_seated_pose(
-    character: bpy.types.Object,
-    reference: bpy.types.Object,
-    frame: int = 600,
-) -> None:
-    """Retarget a Rocketbox seated rest pose while preserving the character rig."""
-    bpy.context.scene.frame_set(frame)
-    body_bones = [
-        "Bip01 Pelvis",
-        "Bip01 Spine",
-        "Bip01 Spine1",
-        "Bip01 Spine2",
-        "Bip01 Neck",
-        "Bip01 Head",
-        "Bip01 L Clavicle",
-        "Bip01 L UpperArm",
-        "Bip01 L Forearm",
-        "Bip01 L Hand",
-        "Bip01 R Clavicle",
-        "Bip01 R UpperArm",
-        "Bip01 R Forearm",
-        "Bip01 R Hand",
-        "Bip01 L Thigh",
-        "Bip01 L Calf",
-        "Bip01 L Foot",
-        "Bip01 L Toe0",
-        "Bip01 R Thigh",
-        "Bip01 R Calf",
-        "Bip01 R Foot",
-        "Bip01 R Toe0",
-    ]
-    for name in body_bones:
-        target_pose = character.pose.bones[name]
-        target_rest = character.data.bones[name]
-        source_pose = reference.pose.bones[name]
-        target_relative = (
-            target_rest.parent.matrix_local.inverted() @ target_rest.matrix_local
-            if target_rest.parent
-            else target_rest.matrix_local
-        )
-        source_relative = (
-            source_pose.parent.matrix.inverted() @ source_pose.matrix
-            if source_pose.parent
-            else source_pose.matrix
-        )
-        target_pose.rotation_mode = "QUATERNION"
-        target_pose.rotation_quaternion = (
-            target_relative.to_quaternion().inverted()
-            @ source_relative.to_quaternion()
-        )
-
-
-def create_companion_idle(armature: bpy.types.Object) -> None:
-    """Create a compact looping seated idle with a small skyward reaction."""
-    animated_bones = [
-        "Bip01 Pelvis",
-        "Bip01 Spine",
-        "Bip01 Spine1",
-        "Bip01 Spine2",
-        "Bip01 Neck",
-        "Bip01 Head",
-        "Bip01 L Clavicle",
-        "Bip01 L UpperArm",
-        "Bip01 L Forearm",
-        "Bip01 L Hand",
-        "Bip01 R Clavicle",
-        "Bip01 R UpperArm",
-        "Bip01 R Forearm",
-        "Bip01 R Hand",
-        "Bip01 L Thigh",
-        "Bip01 L Calf",
-        "Bip01 L Foot",
-        "Bip01 R Thigh",
-        "Bip01 R Calf",
-        "Bip01 R Foot",
-    ]
-    base = {
-        name: armature.pose.bones[name].rotation_quaternion.copy()
-        for name in animated_bones
-    }
-    armature.animation_data_create()
-    action = bpy.data.actions.new("Companion seated idle and sky reaction")
-    armature.animation_data.action = action
-    scene = bpy.context.scene
-    scene.frame_start = 1
-    scene.frame_end = 240
-    scene.render.fps = 30
-
-    poses = [
-        (1, 0.0, 0.0, 0.0),
-        (48, 0.012, -0.018, 0.0),
-        (96, 0.0, 0.018, 0.0),
-        (138, -0.008, 0.052, 0.026),
-        (186, 0.01, 0.018, 0.012),
-        (240, 0.0, 0.0, 0.0),
-    ]
-    for frame, breath, head_turn, sky_tilt in poses:
-        scene.frame_set(frame)
-        for name in animated_bones:
-            armature.pose.bones[name].rotation_quaternion = base[name].copy()
-        armature.pose.bones["Bip01 Spine2"].rotation_quaternion @= Quaternion((1, 0, 0), breath)
-        armature.pose.bones["Bip01 Neck"].rotation_quaternion @= Quaternion((0, 1, 0), head_turn * 0.42)
-        armature.pose.bones["Bip01 Head"].rotation_quaternion @= (
-            Quaternion((0, 1, 0), head_turn)
-            @ Quaternion((1, 0, 0), sky_tilt)
-        )
-        armature.pose.bones["Bip01 L Clavicle"].rotation_quaternion @= Quaternion((0, 0, 1), breath * 0.22)
-        armature.pose.bones["Bip01 R Clavicle"].rotation_quaternion @= Quaternion((0, 0, -1), breath * 0.22)
-        for name in animated_bones:
-            armature.pose.bones[name].keyframe_insert(
-                data_path="rotation_quaternion",
-                frame=frame,
-                group=name,
-            )
-    scene.frame_set(1)
-
-
-def create_companion(
-    collection: bpy.types.Collection,
-    parent: bpy.types.Object,
-    character_path: Path,
-    texture_dir: Path,
-    pose_path: Path,
-) -> tuple[int, int]:
-    """Import and animate a production Rocketbox character for the terrace."""
-    before_character = set(bpy.data.objects)
-    bpy.ops.import_scene.fbx(filepath=str(character_path), use_anim=False)
-    imported_character = [obj for obj in bpy.data.objects if obj not in before_character]
-    armature = next(obj for obj in imported_character if obj.type == "ARMATURE")
-    mesh = max(
-        (obj for obj in imported_character if obj.type == "MESH"),
-        key=lambda obj: len(obj.data.vertices),
-    )
-
-    for material in mesh.data.materials:
-        if material.name == "f022_body":
-            setup_character_material(material, texture_dir, "f022_body")
-        elif material.name == "f022_head":
-            setup_character_material(material, texture_dir, "f022_head")
-        elif material.name == "f022_opacity":
-            setup_character_material(material, texture_dir, "f022_opacity", opacity=True)
-
-    before_pose = set(bpy.data.objects)
-    bpy.ops.import_scene.fbx(filepath=str(pose_path))
-    imported_pose = [obj for obj in bpy.data.objects if obj not in before_pose]
-    pose_armature = next(obj for obj in imported_pose if obj.type == "ARMATURE")
-    retarget_seated_pose(armature, pose_armature)
-
-    # The reference FBX carries a full capture action. It is useful only for
-    # deriving the seated pose and would otherwise be exported beside our
-    # compact idle loop, adding thousands of unused samples to the GLB.
-    for obj in imported_pose:
-        if obj.name in bpy.data.objects:
-            bpy.data.objects.remove(obj, do_unlink=True)
-    if armature.animation_data:
-        armature.animation_data_clear()
-    for action in list(bpy.data.actions):
-        bpy.data.actions.remove(action)
-    create_companion_idle(armature)
-
-    # She occupies the neighbouring cushion and faces the fireworks. The compact
-    # runtime rig retains authored anatomy, fingers, hair cards and 2K PBR maps,
-    # while the exported loop supplies breathing and a subtle skyward glance.
-    armature.location = (0.9, -4.28, 1.45)
-    armature.rotation_euler[2] = math.pi
-    bpy.context.view_layer.update()
-    armature.name = "Companion rig - Rocketbox 81 bones"
-    mesh.name = "Seated companion - Rocketbox LOD0 skinned"
-    mesh.data.name = "Seated companion skinned mesh"
-    # The facial source ships hundreds of blend targets. No runtime expression
-    # controller uses them in this seated wide shot, while their sparse deltas
-    # and normals add roughly 19 MB. Keep the full LOD0 surface, 2K maps and
-    # 81-bone skin, but strip the dormant morph library from this scene asset.
-    if mesh.data.shape_keys:
-        bpy.ops.object.select_all(action="DESELECT")
-        mesh.select_set(True)
-        bpy.context.view_layer.objects.active = mesh
-        bpy.ops.object.shape_key_remove(all=True, apply_mix=False)
-    for polygon in mesh.data.polygons:
-        polygon.use_smooth = True
-    move_to_collection(armature, collection)
-    move_to_collection(mesh, collection)
-    rig_world = armature.matrix_world.copy()
-    armature.parent = parent
-    armature.matrix_world = rig_world
-
-    for obj in imported_character:
-        if obj not in (mesh, armature) and obj.name in bpy.data.objects:
-            bpy.data.objects.remove(obj, do_unlink=True)
-
-    mesh.data.calc_loop_triangles()
-    return len(mesh.data.vertices), len(mesh.data.loop_triangles)
 
 
 def add_preview_light(
@@ -962,7 +780,7 @@ def aim_at(obj: bpy.types.Object, target: Iterable[float]) -> None:
     obj.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
 
 
-def render_preview(path: Path, collection: bpy.types.Collection) -> Path:
+def render_preview(path: Path, collection: bpy.types.Collection) -> None:
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_EEVEE"
     scene.render.resolution_x = 1440
@@ -997,16 +815,6 @@ def render_preview(path: Path, collection: bpy.types.Collection) -> Path:
     aim_at(fill, (0, -4, 1.2))
     bpy.ops.render.render(write_still=True)
 
-    companion_path = path.with_name(f"{path.stem}-companion{path.suffix}")
-    camera.location = (-2.35, -1.8, 2.25)
-    camera_data.lens = 58
-    aim_at(camera, (0.9, -4.25, 1.45))
-    scene.render.resolution_x = 900
-    scene.render.resolution_y = 900
-    scene.render.filepath = str(companion_path)
-    bpy.ops.render.render(write_still=True)
-    return companion_path
-
 
 def select_hierarchy(root: bpy.types.Object) -> None:
     root.select_set(True)
@@ -1025,13 +833,8 @@ def export_glb(path: Path, root: bpy.types.Object) -> None:
         use_selection=True,
         export_yup=True,
         export_apply=False,
-        export_animations=True,
-        export_frame_range=True,
-        # Preserve the authored keyframes instead of sampling every transform
-        # on all 81 bones for all 240 frames. The latter adds ~19 MB of static
-        # animation data without changing the motion.
-        export_force_sampling=False,
-        export_skins=True,
+        export_animations=False,
+        export_skins=False,
         export_materials="EXPORT",
         export_image_format="WEBP",
         export_image_quality=88,
@@ -1046,9 +849,6 @@ def main() -> None:
     args = parse_args()
     if not args.kit.exists():
         raise FileNotFoundError(args.kit)
-    for path in (args.companion, args.companion_textures, args.companion_pose):
-        if not path.exists():
-            raise FileNotFoundError(path)
     clear_scene()
     scene_collection = bpy.context.scene.collection
     templates = bpy.data.collections.new("SOURCE TEMPLATES - NOT EXPORTED")
@@ -1089,6 +889,8 @@ def main() -> None:
         "wood": library.materials.get("MI_WoodTrim") or make_material("Dark oak", (0.14, 0.07, 0.04, 1), 0.78),
         "grass": make_material("Moonlit garden grass", (0.055, 0.18, 0.13, 1), 0.93),
         "leaf": make_material("Deep emerald foliage", (0.025, 0.15, 0.11, 1), 0.88, sheen=0.08),
+        "leaf_light": make_material("Moonlit emerald foliage", (0.045, 0.23, 0.16, 1), 0.86, sheen=0.1),
+        "leaf_deep": make_material("Shadow emerald foliage", (0.012, 0.075, 0.055, 1), 0.91, sheen=0.05),
         "metal": make_material("Aged romantic brass", (0.22, 0.12, 0.055, 1), 0.34, 0.78),
         "lounge_wood": make_material("Hand finished walnut", (0.075, 0.024, 0.011, 1), 0.34, sheen=0.03),
         "velvet": make_material("Berry moon velvet", (0.15, 0.012, 0.052, 1), 0.72, sheen=0.58),
@@ -1102,28 +904,16 @@ def main() -> None:
 
     create_city(library, hero_collection, root, materials)
     create_terrace(library, hero_collection, root, materials)
-    companion_vertices, companion_triangles = create_companion(
-        hero_collection,
-        root,
-        args.companion,
-        args.companion_textures,
-        args.companion_pose,
-    )
     tune_imported_materials(library)
 
-    companion_preview: Path | None = None
     if args.preview:
         args.preview.parent.mkdir(parents=True, exist_ok=True)
-        companion_preview = render_preview(args.preview, preview_collection)
+        render_preview(args.preview, preview_collection)
     export_glb(args.output, root)
     print(f"HERO_ASSET={args.output}")
     print(f"HERO_ASSET_BYTES={args.output.stat().st_size}")
-    print(f"COMPANION_VERTICES={companion_vertices}")
-    print(f"COMPANION_TRIANGLES={companion_triangles}")
     if args.preview:
         print(f"HERO_PREVIEW={args.preview}")
-    if companion_preview:
-        print(f"COMPANION_PREVIEW={companion_preview}")
 
 
 if __name__ == "__main__":

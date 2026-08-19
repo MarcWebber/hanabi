@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { FireworkScene } from "./FireworkScene";
 import {
+  calculateExposureStops,
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_FIREWORK_TUNING,
   type CameraFilter,
@@ -100,34 +101,40 @@ const DEFAULT_SHOW: ShowCue[] = [
 
 const SHOW_DELAYS = [0.4, 0.7, 1, 1.4, 2];
 
-const SHUTTER_OPTIONS = [2, 1, 1 / 2, 1 / 4, 1 / 8, 1 / 15, 1 / 30, 1 / 60, 1 / 125, 1 / 250, 1 / 500];
-const ISO_OPTIONS = [100, 200, 320, 400, 800, 1600];
+const APERTURE_OPTIONS = [1.2, 1.4, 1.8, 2, 2.8, 4, 5.6, 8, 11, 16];
+const SHUTTER_OPTIONS = [8, 4, 2, 1, 1 / 2, 1 / 4, 1 / 8, 1 / 15, 1 / 30, 1 / 60, 1 / 125, 1 / 250, 1 / 500, 1 / 1000];
+const ISO_OPTIONS = [100, 200, 320, 400, 800, 1600, 3200, 6400, 12800, 25600];
 
 const CAMERA_PRESETS: Array<{ name: string; note: string; settings: CameraSettings }> = [
   {
     name: "长曝光",
     note: "1 s 光轨",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 8, shutterSeconds: 1, iso: 100, bloom: 0.2, filter: "cinema" },
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 11, shutterSeconds: 1, iso: 100, focusDistance: 48, bloom: 0.2, filter: "cinema" },
   },
   {
     name: "夜景",
-    note: "低辉光",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 4, iso: 320, bloom: 0.3, filter: "neutral" },
+    note: "ISO 800",
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 4, shutterSeconds: 1 / 60, iso: 800, focusDistance: 48, bloom: 0.28, filter: "neutral" },
+  },
+  {
+    name: "高感",
+    note: "ISO 25600",
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 28, aperture: 4, shutterSeconds: 1 / 60, iso: 25600, focusDistance: 48, bloom: 0.16, filter: "neutral" },
   },
   {
     name: "浅景深",
-    note: "F2.0",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 35, aperture: 2, iso: 400, bloom: 0.46, filter: "cinema" },
+    note: "F1.8",
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 35, aperture: 1.8, shutterSeconds: 1 / 125, iso: 400, focusDistance: 26, bloom: 0.4, filter: "cinema" },
   },
   {
     name: "暖色",
     note: "50 mm",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 50, aperture: 1.8, iso: 320, bloom: 0.38, filter: "rose" },
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 50, aperture: 2, shutterSeconds: 1 / 125, iso: 200, focusDistance: 40, bloom: 0.34, filter: "rose" },
   },
   {
     name: "长焦",
     note: "70 mm",
-    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 70, aperture: 4.5, iso: 800, bloom: 0.24, filter: "moonlight" },
+    settings: { ...DEFAULT_CAMERA_SETTINGS, focalLength: 70, aperture: 5.6, shutterSeconds: 1 / 60, iso: 1600, focusDistance: 50, bloom: 0.22, filter: "moonlight" },
   },
 ];
 
@@ -141,6 +148,11 @@ const FILTERS: Array<{ id: CameraFilter; name: string }> = [
 function formatShutter(seconds: number) {
   if (seconds >= 1) return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)} s`;
   return `1/${Math.round(1 / seconds)} s`;
+}
+
+function formatExposureStops(stops: number) {
+  if (Math.abs(stops) < 0.05) return "±0.0 EV";
+  return `${stops > 0 ? "+" : ""}${stops.toFixed(1)} EV`;
 }
 
 function sampleText(text: string): PatternPoint[] {
@@ -244,6 +256,8 @@ export function FireworkExperience() {
   const chromeTimerRef = useRef<number | null>(null);
   const musicDuckTimerRef = useRef<number | null>(null);
   const musicVolumeRef = useRef(0.34);
+  const shutterAudioRef = useRef<AudioContext | null>(null);
+  const isExposingRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [chromeVisible, setChromeVisible] = useState(true);
@@ -263,6 +277,9 @@ export function FireworkExperience() {
   const [autoPlay, setAutoPlay] = useState(true);
   const [photoMode, setPhotoMode] = useState(false);
   const [photoPaused, setPhotoPaused] = useState(false);
+  const [isExposing, setIsExposing] = useState(false);
+  const [exposureProgress, setExposureProgress] = useState(0);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [cameraSettings, setCameraSettings] = useState<CameraSettings>({ ...DEFAULT_CAMERA_SETTINGS });
   const [environment, setEnvironment] = useState<EnvironmentPreset>("moon-castle");
   const [activePopover, setActivePopover] = useState<"atmosphere" | "music" | null>(null);
@@ -274,6 +291,8 @@ export function FireworkExperience() {
   const [showProgress, setShowProgress] = useState(0);
   const [showChapter, setShowChapter] = useState("序幕");
   const [status, setStatus] = useState("系统就绪");
+  const exposureStops = calculateExposureStops(cameraSettings);
+  const exposureNeedle = Math.min(1, Math.max(0, (exposureStops + 6) / 12));
 
   const duckMusic = useCallback((intensity: number) => {
     const audio = audioRef.current;
@@ -378,12 +397,14 @@ export function FireworkExperience() {
 
   const setPhotoModeActive = useCallback(
     (active: boolean) => {
+      if (isExposing) return;
       setPhotoMode(active);
       setPhotoPaused(false);
+      if (!active) setCapturedPhoto(null);
       sceneRef.current?.setPaused(false);
       announce(active ? "摄影模式已开启" : "已返回观赏模式");
     },
-    [announce],
+    [announce, isExposing],
   );
 
   const togglePhotoMode = useCallback(() => {
@@ -391,40 +412,17 @@ export function FireworkExperience() {
   }, [photoMode, setPhotoModeActive]);
 
   const togglePhotoPause = useCallback(() => {
+    if (isExposing) return;
     const next = !photoPaused;
     setPhotoPaused(next);
     sceneRef.current?.setPaused(next);
     announce(next ? "画面已暂停" : "画面继续播放");
-  }, [announce, photoPaused]);
+  }, [announce, isExposing, photoPaused]);
 
   const resetCamera = useCallback(() => {
     sceneRef.current?.resetView();
     announce("视角已复位");
   }, [announce]);
-
-  useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
-        event.preventDefault();
-        setPhotoModeActive(!photoMode);
-        return;
-      }
-      if (!photoMode) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.matches("input, select, textarea")) return;
-      if (event.code === "Space") {
-        event.preventDefault();
-        togglePhotoPause();
-      } else if (event.key.toLowerCase() === "r") {
-        event.preventDefault();
-        resetCamera();
-      } else if (event.key === "Escape") {
-        setPhotoModeActive(false);
-      }
-    };
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [photoMode, resetCamera, setPhotoModeActive, togglePhotoPause]);
 
   const launchText = useCallback(
     (finale = false) => {
@@ -632,15 +630,108 @@ export function FireworkExperience() {
     announce(`摄影预设：${name}`);
   };
 
-  const capturePhoto = () => {
-    const image = sceneRef.current?.captureFrame();
-    if (!image) return;
+  const playShutterClick = useCallback((closing = false) => {
+    const context = shutterAudioRef.current ?? new AudioContext();
+    shutterAudioRef.current = context;
+    if (context.state === "suspended") void context.resume();
+    const duration = closing ? 0.038 : 0.028;
+    const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate);
+    const samples = buffer.getChannelData(0);
+    for (let index = 0; index < samples.length; index += 1) {
+      const envelope = Math.exp(-index / (context.sampleRate * (closing ? 0.011 : 0.007)));
+      samples[index] = (Math.random() * 2 - 1) * envelope;
+    }
+    const source = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    const start = context.currentTime + 0.004;
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(closing ? 720 : 1180, start);
+    filter.Q.setValueAtTime(closing ? 0.78 : 1.1, start);
+    gain.gain.setValueAtTime(closing ? 0.075 : 0.09, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    source.buffer = buffer;
+    source.connect(filter).connect(gain).connect(context.destination);
+    source.start(start);
+  }, []);
+
+  useEffect(() => () => {
+    const context = shutterAudioRef.current;
+    if (context && context.state !== "closed") void context.close();
+  }, []);
+
+  const capturePhoto = useCallback(async () => {
+    const scene = sceneRef.current;
+    if (!scene || isExposingRef.current) return;
+    isExposingRef.current = true;
+    setCapturedPhoto(null);
+    setExposureProgress(0);
+    setIsExposing(true);
+    playShutterClick(false);
+    announce(`快门开启 · ${formatShutter(cameraSettings.shutterSeconds)}`);
+    try {
+      const image = await scene.captureExposure(setExposureProgress);
+      if (!image) return;
+      playShutterClick(true);
+      setCapturedPhoto(image);
+      setPhotoPaused(true);
+      scene.setPaused(true);
+      announce("曝光完成");
+    } finally {
+      isExposingRef.current = false;
+      setIsExposing(false);
+      setExposureProgress(1);
+    }
+  }, [announce, cameraSettings.shutterSeconds, playShutterClick]);
+
+  const saveCapturedPhoto = () => {
+    if (!capturedPhoto) return;
     const link = document.createElement("a");
-    link.href = image;
-    link.download = `firework-frame-${Date.now()}.png`;
+    link.href = capturedPhoto;
+    link.download = `hanabi-${cameraSettings.iso}-f${cameraSettings.aperture}-${Date.now()}.png`;
     link.click();
     announce("照片已保存");
   };
+
+  const closePhotoReview = () => {
+    setCapturedPhoto(null);
+    setPhotoPaused(false);
+    sceneRef.current?.setPaused(false);
+    announce("回到取景器");
+  };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setPhotoModeActive(!photoMode);
+        return;
+      }
+      if (!photoMode) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, select, textarea, button")) return;
+      if (!event.repeat && (event.code === "Enter" || event.key.toLowerCase() === "s")) {
+        event.preventDefault();
+        if (!capturedPhoto) void capturePhoto();
+      } else if (event.code === "Space") {
+        event.preventDefault();
+        togglePhotoPause();
+      } else if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        resetCamera();
+      } else if (event.key === "Escape") {
+        if (capturedPhoto) {
+          setCapturedPhoto(null);
+          setPhotoPaused(false);
+          sceneRef.current?.setPaused(false);
+          return;
+        }
+        setPhotoModeActive(false);
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [capturePhoto, capturedPhoto, photoMode, resetCamera, setPhotoModeActive, togglePhotoPause]);
 
   const handleSkyPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     dragStartRef.current = { x: event.clientX, y: event.clientY };
@@ -862,18 +953,22 @@ export function FireworkExperience() {
       </section>
 
       <div className="photo-mode-indicator" aria-hidden={!photoMode}>
-        <span className={photoPaused ? "is-paused" : ""} />
-          <strong>摄影模式</strong>
-        <small>{photoPaused ? "画面暂停" : "实时"}</small>
+        <span className={isExposing ? "is-exposing" : photoPaused ? "is-paused" : ""} />
+        <strong>{isExposing ? "曝光中" : "摄影模式"}</strong>
+        <small>{isExposing ? `${Math.round(exposureProgress * 100)}%` : photoPaused ? "照片回放" : "实时取景"}</small>
       </div>
 
-      <section className={`camera-console ${photoMode ? "is-open" : ""}`} aria-label="专业摄像参数">
+      <section
+        className={`camera-console ${photoMode ? "is-open" : ""} ${isExposing ? "is-exposing" : ""}`}
+        aria-label="专业摄像参数"
+        aria-busy={isExposing}
+      >
         <header className="camera-console-header">
           <div>
             <p>CAMERA</p>
             <h2>摄影参数</h2>
           </div>
-          <button type="button" onClick={() => setPhotoModeActive(false)} aria-label="退出摄像模式">×</button>
+          <button type="button" disabled={isExposing} onClick={() => setPhotoModeActive(false)} aria-label="退出摄像模式">×</button>
         </header>
 
         <div className="camera-readout" aria-label="当前曝光参数">
@@ -881,6 +976,17 @@ export function FireworkExperience() {
           <span><small>IRIS</small><strong>ƒ/{cameraSettings.aperture.toFixed(1)}</strong></span>
           <span><small>SHUTTER</small><strong>{formatShutter(cameraSettings.shutterSeconds)}</strong></span>
           <span><small>SENSOR</small><strong>ISO {cameraSettings.iso}</strong></span>
+        </div>
+
+        <div className="exposure-meter" aria-label={`测光结果 ${formatExposureStops(exposureStops)}`}>
+          <span>METER</span>
+          <div aria-hidden="true">
+            <i style={{ "--meter-position": `${exposureNeedle * 100}%` } as CSSProperties} />
+            <b />
+          </div>
+          <output className={Math.abs(exposureStops) > 3 ? "is-clipped" : ""}>
+            {formatExposureStops(exposureStops)}
+          </output>
         </div>
 
         <div className="camera-presets" aria-label="摄像预设">
@@ -900,6 +1006,7 @@ export function FireworkExperience() {
             <span><strong>焦段</strong><small>FOCAL LENGTH</small></span>
             <output>{cameraSettings.focalLength.toFixed(0)} mm</output>
             <input
+              aria-label="焦段"
               type="range"
               min="18"
               max="85"
@@ -912,18 +1019,20 @@ export function FireworkExperience() {
             <span><strong>光圈</strong><small>APERTURE</small></span>
             <output>ƒ/{cameraSettings.aperture.toFixed(1)}</output>
             <input
+              aria-label="光圈"
               type="range"
-              min="1.4"
-              max="16"
-              step="0.1"
-              value={cameraSettings.aperture}
-              onChange={(event) => updateCameraSettings({ aperture: Number(event.target.value) })}
+              min="0"
+              max={APERTURE_OPTIONS.length - 1}
+              step="1"
+              value={APERTURE_OPTIONS.findIndex((value) => value === cameraSettings.aperture)}
+              onChange={(event) => updateCameraSettings({ aperture: APERTURE_OPTIONS[Number(event.target.value)] })}
             />
           </label>
           <label>
             <span><strong>快门</strong><small>SHUTTER SPEED</small></span>
             <output>{formatShutter(cameraSettings.shutterSeconds)}</output>
             <input
+              aria-label="快门速度"
               type="range"
               min="0"
               max={SHUTTER_OPTIONS.length - 1}
@@ -936,6 +1045,7 @@ export function FireworkExperience() {
             <span><strong>感光度</strong><small>SENSOR ISO</small></span>
             <output>ISO {cameraSettings.iso}</output>
             <input
+              aria-label="感光度 ISO"
               type="range"
               min="0"
               max={ISO_OPTIONS.length - 1}
@@ -948,9 +1058,10 @@ export function FireworkExperience() {
             <span><strong>对焦距离</strong><small>FOCUS</small></span>
             <output>{cameraSettings.focusDistance.toFixed(0)} m</output>
             <input
+              aria-label="对焦距离"
               type="range"
               min="6"
-              max="70"
+              max="90"
               step="1"
               value={cameraSettings.focusDistance}
               onChange={(event) => updateCameraSettings({ focusDistance: Number(event.target.value) })}
@@ -960,6 +1071,7 @@ export function FireworkExperience() {
             <span><strong>镜头辉光</strong><small>HALATION</small></span>
             <output>{Math.round(cameraSettings.bloom * 100)}%</output>
             <input
+              aria-label="镜头辉光"
               type="range"
               min="0"
               max="1"
@@ -987,24 +1099,61 @@ export function FireworkExperience() {
         </div>
 
         <div className="camera-actions">
-          <button type="button" onClick={togglePhotoPause}>
+          <button type="button" disabled={isExposing} onClick={togglePhotoPause}>
             <span aria-hidden="true">{photoPaused ? "▶" : "Ⅱ"}</span>
             {photoPaused ? "继续播放" : "暂停画面"}
           </button>
-          <button type="button" onClick={resetCamera}>
+          <button type="button" disabled={isExposing} onClick={resetCamera}>
             <span aria-hidden="true">⌖</span> 重置视角
           </button>
-          <button type="button" className="capture-button" onClick={capturePhoto}>
-            <span aria-hidden="true">●</span> 保存照片
+          <button type="button" disabled={isExposing} className="capture-button" onClick={() => void capturePhoto()}>
+            <span aria-hidden="true">{isExposing ? "◌" : "●"}</span>
+            {isExposing ? "曝光中" : "释放快门"}
           </button>
         </div>
 
         <p className="camera-shortcuts">
           <span><kbd>⌘ P</kbd> 进入 / 退出</span>
+          <span><kbd>ENTER</kbd> 或 <kbd>S</kbd> 快门</span>
           <span><kbd>SPACE</kbd> 暂停 / 播放</span>
           <span><kbd>R</kbd> 视角归位</span>
         </p>
       </section>
+
+      <div
+        className={`exposure-curtain ${isExposing ? "is-active" : ""}`}
+        aria-hidden={!isExposing}
+        style={{
+          "--exposure-progress": `${exposureProgress * 100}%`,
+          "--shutter-close-delay": `${Math.max(cameraSettings.shutterSeconds, 0.09)}s`,
+        } as CSSProperties}
+      >
+        <div className="exposure-shutter-readout">
+          <span><i /> EXP</span>
+          <strong>{formatShutter(cameraSettings.shutterSeconds)}</strong>
+          <small>保持相机稳定</small>
+          <b><i /></b>
+        </div>
+      </div>
+
+      {capturedPhoto && (
+        <section className="photo-review" aria-label="照片回放">
+          {/* A data URL from the live WebGL canvas cannot use the image optimizer. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={capturedPhoto} alt="刚刚完成曝光的花火照片" />
+          <header>
+            <div>
+              <small>CAPTURED</small>
+              <strong>{cameraSettings.focalLength.toFixed(0)} mm · ƒ/{cameraSettings.aperture.toFixed(1)} · {formatShutter(cameraSettings.shutterSeconds)} · ISO {cameraSettings.iso}</strong>
+            </div>
+            <button type="button" onClick={closePhotoReview} aria-label="关闭照片回放">×</button>
+          </header>
+          <footer>
+            <button type="button" onClick={closePhotoReview}>返回取景</button>
+            <button type="button" className="save-capture" onClick={saveCapturedPhoto}>保存照片</button>
+          </footer>
+        </section>
+      )}
 
       <section
         className={`firework-studio ${studioOpen ? "is-open" : ""} ${mode === "draw" || mode === "effect" || mode === "show" ? "is-expanded" : ""}`}
